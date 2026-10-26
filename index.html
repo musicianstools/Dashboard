@@ -781,6 +781,7 @@ tr.bdrop-after td{box-shadow:inset 0 -3px 0 var(--accent)}
 .todo-add{margin-bottom:10px}
 .todo-add input[type=date]{flex:0 0 auto;width:auto;padding:6px 8px;font-size:14px;color:var(--ink-2)}
 .app-version{display:block;font-size:11.5px;color:var(--muted);padding:6px 10px 0;opacity:.8}
+.gig-dot{width:10px;height:10px;border-radius:50%;background:var(--c-music);flex:0 0 auto;align-self:center;margin-right:2px}.gig-dot.has-c{background:var(--ev)}
 .recat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
 </style>
 </head>
@@ -2198,7 +2199,7 @@ function loadFeedViaScript(url, anonymous) {
    other device's changes when opened or switched back to. Newest change wins. Calendar events,
    receipt files and your API key stay on each device. */
 /** Each device knows what it is, so sync messages can say "your phone" or "your Mac". */
-const APP_VERSION = '2026-10-13 · recategorise events';   // shown in the sidebar and More, so you can check which version is running
+const APP_VERSION = '2026-10-27 · past gigs';   // shown in the sidebar and More, so you can check which version is running
 const DEVICE_KEY = 'mitch-dashboard-device';
 function deviceName() {
   try { const n = localStorage.getItem(DEVICE_KEY); if (n) return n; } catch (e) {}
@@ -4176,7 +4177,7 @@ function viewMusic() {
         ${g.cash ? '' : g.invoiceNo ? `<button class="btn small ghost" data-action="gig-gen-invoice" data-id="${g.id}" title="Download ${esc(invoiceLabel(g))} again">Download invoice</button><button class="btn small ghost danger-link" data-action="inv-delete" data-id="${g.id}">Delete invoice</button>` : g.invoiced ? `<button class="btn small ghost" data-action="gig-gen-invoice" data-id="${g.id}">Generate invoice</button><button class="btn small ghost danger-link" data-action="inv-delete" data-id="${g.id}">Delete invoice</button>` : `<button class="btn small ghost" data-action="gig-gen-invoice" data-id="${g.id}">Generate invoice</button>`}
         <label class="cash-tick"><input type="checkbox" data-change="gig-cash" data-id="${g.id}" ${g.cash ? 'checked' : ''}> Cash job, no invoice</label>
         ${g.link ? `<a class="btn small ghost" href="${esc(g.link)}" target="_blank" rel="noopener">Open in Google Calendar</a>` : ''}
-        ${g.source === 'calendar' && !g.missing ? '' : `<button class="btn small ghost" data-action="gig-delete" data-id="${g.id}">Delete gig</button>`}
+        <button class="btn small ghost danger-link" data-action="gig-delete" data-id="${g.id}" title="${g.source === 'calendar' ? "Cancelled? Delete it here. It won't come back from your calendar." : 'Delete this gig'}">Delete gig</button>
       </div>
       ${isOpen ? `<div class="gig-body ${r.hosting ? 'one' : ''}">
         <div><h3 style="margin-top:0">Prep checklist <span class="muted" style="font-weight:400;font-size:13px;font-family:var(--font-body)">click an item to edit it</span></h3>${checklistEditor('gig:' + g.id, {
@@ -4199,6 +4200,11 @@ function viewMusic() {
   <section class="panel"><div class="teach-head"><h2>Upcoming gigs <span class="sub">${up.length ? plural(up.length, 'upcoming gig') : ''}</span></h2>
     ${up.length > 1 ? `<div class="inline-form"><button class="btn small ghost" data-action="gigs-all" data-open="1">Expand all</button><button class="btn small ghost" data-action="gigs-all" data-open="0">Collapse all</button></div>` : ''}</div>
     ${up.length ? `<div class="gig-list">${monthGroups(up, g => g.date, false).map(([k, list]) => monthFold('gig', k, `${plural(list.length, 'gig')}${list.some(g => gigFee(g) != null) ? ', ' + aud(list.reduce((a, g) => a + (gigFee(g) || 0), 0)) : ''}`, list.map(gigCard).join(''), true)).join('')}</div>` : `<p class="empty">No gigs booked. Add one above${S().calendar.enabled ? '' : ', or connect Google Calendar'}.</p>`}
+  </section>
+  <section class="panel section-gap"><div class="teach-head"><h2>Past gigs <span class="sub">${past.length ? plural(past.length, 'gig') : ''}</span></h2></div>
+    ${past.length ? `<div class="gig-list">${monthGroups(past, g => g.date, true).map(([k, list]) => monthFold('pastgig', k, `${plural(list.length, 'gig')}${list.some(g => gigFee(g) != null) ? ', ' + aud(list.reduce((a, g) => a + (gigFee(g) || 0), 0)) : ''}`,
+      `<ul class="rows">${list.map(g => `<li class="row"><span class="gig-dot ${gigColor(g) ? 'has-c' : ''}"${colorVar(gigColor(g))}></span><div class="row-main"><span class="row-title" style="cursor:default">${esc(g.venue)}${g.act ? ` <span class="muted">${esc(g.act)}</span>` : ''}</span><div class="row-meta"><span>${D.label(g.date)}${g.time ? ', ' + D.time(g.time) : ''}</span><span>${feeText(g)}</span><span>${g.reviewPending ? '<span class="warn-t">To check</span>' : g.paid ? (g.cash ? 'Cash received' : 'Paid') : g.invoiced ? 'Invoiced, not paid yet' : g.cash ? 'Cash, not received yet' : '<span class="warn-t">Not invoiced</span>'}</span></div></div>
+        <button class="btn small ghost" data-action="gig-edit" data-id="${g.id}">Edit</button><button class="btn small ghost danger-link" data-action="gig-delete" data-id="${g.id}" title="Cancelled or never happened? Delete it. It won't come back from your calendar.">Delete</button></li>`).join('')}</ul>`, true)).join('')}</div>` : '<p class="empty">No past gigs yet.</p>'}
   </section>
   <div class="grid section-gap">
     <section class="panel"><div class="teach-head"><h2>Payments</h2><div class="inline-form"><button class="btn small" data-action="inv-zip-open">Download invoices</button><button class="btn small ghost" data-action="pay-all" data-open="1">Expand all months</button><button class="btn small ghost" data-action="pay-all" data-open="0">Collapse all</button></div></div>
@@ -5621,7 +5627,17 @@ const ACTIONS = {
     st.isSample = false; activeSetlist = null; preview = null; focus = null;
     closeOverlay(); commit(); toast('Sample data cleared', snap);
   },
-  'gig-delete'(el) { const snap = Store.snapshot(); const g = gigById(el.dataset.id); S().gigs = S().gigs.filter(x => x.id !== g.id); S().tasks.forEach(t => { if (t.gigId === g.id) t.gigId = null; }); commit(); toast(`Deleted gig at ${g.venue}`, snap); },
+  'gig-delete'(el) {
+    const st = S(), snap = Store.snapshot(), g = gigById(el.dataset.id); if (!g) return;
+    // A calendar gig would come straight back on the next sync, so its calendar event is set aside too.
+    [...new Set([...(g.calLinks || []), ...(g.calEventId ? [normId(g.calEventId)] : [])])].forEach(id => { st.calOverrides[normId(id)] = 'hidden'; });
+    st.gigs = st.gigs.filter(x => x.id !== g.id);
+    st.tasks = st.tasks.filter(t => !(t.gigId === g.id && t.status === 'todo'));
+    st.tasks.forEach(t => { if (t.gigId === g.id) t.gigId = null; });
+    openGigs.delete(g.id);
+    if (S().calendar.enabled) syncCalendarItems();
+    commit(); toast(`Deleted gig at ${venueBaseName(g.venue)}`, snap);
+  },
   async 'copy-invoice'(el) {
     const text = `${$('#inv-subj').value}\n\n${$('#inv-body').value}`;
     try { await navigator.clipboard.writeText(text); el.textContent = 'Copied'; }
