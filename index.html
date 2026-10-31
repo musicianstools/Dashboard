@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Dashboard">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
+<link rel="icon" type="image/png" href="favicon.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Onest:wght@400;500;600&display=swap" rel="stylesheet">
@@ -248,6 +248,8 @@ button.cal-ev:hover{background:var(--accent-soft)}
 }
 @media (max-width:480px){.main{padding:0 12px 40px}.panel{padding:16px}.now{padding:20px 18px;border-radius:20px}.now-actions .btn{flex:1 1 auto;justify-content:center}}
 .tabbar,.fab{display:none}
+.topbar[hidden],.fab[hidden],.ai-status[hidden]{display:none!important}
+.att .att-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 @media (max-width:860px){
   .side{display:none}
   .main{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
@@ -788,14 +790,13 @@ tr.bdrop-after td{box-shadow:inset 0 -3px 0 var(--accent)}
 <body>
 <div class="app">
   <aside class="side">
-    <div class="brand">Mitch's Dashboard<small>Your chief of staff</small></div>
+    <div class="brand">Mitch's Dashboard<small>Gigs and budget</small></div>
     <nav class="nav" id="nav" aria-label="Sections"></nav>
     <div class="side-foot">
-      <div class="ai-status" id="ai-status"><span class="dot"></span><span>Built-in assistant</span></div>
+      <div class="ai-status" id="ai-status" hidden><span class="dot"></span><span>Built-in assistant</span></div>
       <button class="ai-status" id="cal-status" data-action="cal-open"><span class="dot"></span><span>Google Calendar</span></button>
       <button class="ai-status" id="sync-status" data-action="cal-open" hidden><span class="dot"></span><span>Sync</span></button>
       <span class="app-version" id="app-version"></span>
-      <button data-action="ai-settings">Teaching partner settings</button>
       <button data-action="theme">Switch light / dark</button>
       <button data-action="export">Export a backup</button>
       <button data-action="import">Import a backup</button>
@@ -808,7 +809,7 @@ tr.bdrop-after td{box-shadow:inset 0 -3px 0 var(--accent)}
     </div>
   </aside>
   <main class="main">
-    <div class="topbar">
+    <div class="topbar" hidden>
       <form class="ask" id="ask-form" autocomplete="off">
         <label for="ask" class="sr">Ask a question or capture a thought</label>
         <input id="ask" placeholder="Ask what to do next, or type a thought to capture it…">
@@ -822,7 +823,7 @@ tr.bdrop-after td{box-shadow:inset 0 -3px 0 var(--accent)}
   </main>
 </div>
 <nav class="tabbar" id="tabbar" aria-label="Sections"></nav>
-<button class="fab" data-action="capture-open" aria-label="Capture a thought, task or expense">+</button>
+<button class="fab" hidden data-action="capture-open" aria-label="Capture a thought, task or expense">+</button>
 <input type="file" id="cap-photo" accept="image/*" capture="environment" hidden>
 <div id="overlay"></div>
 <div id="toast-root" aria-live="polite"></div>
@@ -890,7 +891,8 @@ const TYPES = {
   appointment: 'Appointment to book', event: 'Scheduled event', bill: 'Bill', shopping: 'Shopping',
   birthday: 'Birthday', workout: 'Workout', idea: 'Idea'
 };
-const VIEWS = [['today','Today'],['inbox','Inbox'],['teaching','Teaching'],['music','Music'],['life','Life admin'],['budget','Budget'],['fitness','Fitness'],['someday','Someday']];
+// Pared back to what's used: Snapshot, gig money and Budget. The other pages' code and data are kept, just not shown.
+const VIEWS = [['today','Today'],['music','Gig tracker'],['budget','Budget']];
 const VIEW_DOT = { today: 'var(--accent)', inbox: 'var(--ink-2)', teaching: 'var(--c-teaching)', music: 'var(--c-music)', life: 'var(--c-personal)', budget: 'var(--c-finance)', fitness: 'var(--c-health)', someday: 'var(--c-someday)' };
 const EST = { lesson: 50, assessment: 90, resource: 45, rehearsal: 75, invoice: 10, appointment: 10, shopping: 20, bill: 10, workout: 45, birthday: 15, idea: 0, task: 25, class: 60, unit: 120, event: 60 };
 const GIG_TEMPLATE = [
@@ -1400,9 +1402,9 @@ function lifeAudit() {
     if (r.reh === 0 && !r.hosting && !calRehearsalsFor(g).booked.length) { parts.push('no rehearsal logged'); acts.push({ label: 'Log rehearsal', action: 'gig-rehearse', id: g.id }); }
     if (!r.hasSetlist) parts.push('no setlist');
 
-    if (parts.length) add('Missing preparations', r.reh === 0 && D.diff(g.date) <= 7 ? 'high' : 'med', `You have a gig at ${g.venue} ${when} but ${listJoin(parts)}.`, acts.concat(!r.hasSetlist ? [{ label: 'Open Music', action: 'nav', view: 'music' }] : []));
-    if (g.missing) add('Missing preparations', 'med', `The ${D.label(g.date)} gig at ${g.venue} is no longer in your Google Calendar.`, [{ label: 'Open Music', action: 'nav', view: 'music' }]);
-    if (r.notReady.length) add('Missing preparations', 'med', `${numWord(r.notReady.length)} ${r.notReady.length === 1 ? 'song' : 'songs'} in your setlist for ${g.venue} ${r.notReady.length === 1 ? "isn't" : "aren't"} gig-ready yet: ${listJoin(r.notReady.map(x => x.title))}.`, [{ label: 'Open Music', action: 'nav', view: 'music' }]);
+    if (parts.length) add('Missing preparations', r.reh === 0 && D.diff(g.date) <= 7 ? 'high' : 'med', `You have a gig at ${g.venue} ${when} but ${listJoin(parts)}.`, acts.concat(!r.hasSetlist ? [{ label: 'Open Gig tracker', action: 'nav', view: 'music' }] : []));
+    if (g.missing) add('Missing preparations', 'med', `The ${D.label(g.date)} gig at ${g.venue} is no longer in your Google Calendar.`, [{ label: 'Open Gig tracker', action: 'nav', view: 'music' }]);
+    if (r.notReady.length) add('Missing preparations', 'med', `${numWord(r.notReady.length)} ${r.notReady.length === 1 ? 'song' : 'songs'} in your setlist for ${g.venue} ${r.notReady.length === 1 ? "isn't" : "aren't"} gig-ready yet: ${listJoin(r.notReady.map(x => x.title))}.`, [{ label: 'Open Gig tracker', action: 'nav', view: 'music' }]);
   });
   // Upcoming deadlines
   const soon = open.filter(t => isActionable(t) && t.due && D.diff(t.due) >= 0 && D.diff(t.due) <= 7).sort((a, b) => a.due.localeCompare(b.due));
@@ -1418,12 +1420,12 @@ function lifeAudit() {
   // Money
   allCalEvents().filter(e => evKind(e) === 'bill' && !st.calPaid[e.id] && D.diff(e.date) >= -3 && D.diff(e.date) <= 3)
     .forEach(e => add('Money', D.diff(e.date) <= 0 ? 'high' : 'med', `${e.title} ${D.diff(e.date) < 0 ? 'was' : 'is'} due ${D.diff(e.date) <= 1 && D.diff(e.date) >= -1 ? D.label(e.date).toLowerCase() : D.label(e.date)}.`, [{ label: 'Mark paid', action: 'calbill-paid', id: e.id }]));
-  { const pend = st.gigs.filter(g => g.reviewPending); if (pend.length) add('Money', 'low', `${numWord(pend.length)} past ${pend.length === 1 ? 'gig' : 'gigs'} from your calendar since 1 July ${pend.length === 1 ? 'needs' : 'need'} checking: were ${pend.length === 1 ? 'it' : 'they'} paid?`, [{ label: 'Open Music', action: 'nav', view: 'music' }]); }
+  { const pend = st.gigs.filter(g => g.reviewPending); if (pend.length) add('Money', 'low', `${numWord(pend.length)} past ${pend.length === 1 ? 'gig' : 'gigs'} from your calendar since 1 July ${pend.length === 1 ? 'needs' : 'need'} checking: were ${pend.length === 1 ? 'it' : 'they'} paid?`, [{ label: 'Open Gig tracker', action: 'nav', view: 'music' }]); }
   st.gigs.filter(g => g.cash && !g.paid && !g.reviewPending && D.diff(g.date) <= -2 && D.diff(g.date) >= -60).forEach(g => add('Money', 'low', `Did you get paid for ${g.venue} (${D.label(g.date)})? It was a cash job.`, [{ label: 'Mark cash received', action: 'gig-paid', id: g.id }]));
   st.gigs.filter(g => D.diff(g.date) < 0 && !g.invoiced && needsInvoice(g) && !g.reviewPending).forEach(g => add('Money', 'high', `Your gig at ${g.venue} was ${D.rel(g.date)} and hasn't been invoiced (${feeText(g)}).`, [{ label: 'Generate invoice', action: 'gig-gen-invoice', id: g.id }, { label: 'Mark invoiced', action: 'gig-invoice', id: g.id }, { label: 'Cash job', action: 'gig-cash-set', id: g.id }]));
   st.gigs.filter(g => g.invoiced && !g.paid && !g.cash && !g.reviewPending && g.invoicedAt && -D.diff(g.invoicedAt) > Math.max(+invSettings().termsDays || 7, avgPayDays(venueFor(g)) || 0)).forEach(g => add('Money', 'med', `${venueBaseName(g.venue)} hasn't paid ${feeText(g)}. The invoice went out ${D.rel(g.invoicedAt)}, so it’s past due.`, [{ label: 'Mark paid', action: 'gig-paid', id: g.id }]));
   const nofee = upcomingGigs().filter(g => g.fee == null && D.diff(g.date) <= 30);
-  if (nofee.length) add('Money', 'low', `${numWord(nofee.length)} upcoming ${nofee.length === 1 ? 'gig has' : 'gigs have'} no fee recorded: ${listJoin(nofee.map(g => g.venue))}.`, [{ label: 'Open Music', action: 'nav', view: 'music' }]);
+  if (nofee.length) add('Money', 'low', `${numWord(nofee.length)} upcoming ${nofee.length === 1 ? 'gig has' : 'gigs have'} no fee recorded: ${listJoin(nofee.map(g => g.venue))}.`, [{ label: 'Open Gig tracker', action: 'nav', view: 'music' }]);
   const calErr = Cal.firstError();
   if (calErr) add('Forgotten items', 'med', calErr, [{ label: 'Calendar settings', action: 'cal-open' }]);
   // Forgotten
@@ -1535,7 +1537,7 @@ function cmdGigReady() {
   const tasks = r.tasks.length ? `<p>Still to do for this gig:</p><ul>${r.tasks.map(t => taskLi(t, t.due ? D.label(t.due) : '')).join('')}</ul>` : '';
   return { title: `${g.venue}, ${D.label(g.date)} at ${D.time(g.time)}`,
     html: `<p><strong>${verdict}</strong> The gig is ${D.rel(g.date)} and it's ${r.pct}% ready.</p>${iss}${tasks}`,
-    actions: (r.hosting ? [] : [{ label: 'Log a rehearsal', action: 'gig-rehearse', id: g.id }]).concat([{ label: 'Open Music', action: 'nav', view: 'music' }]) };
+    actions: (r.hosting ? [] : [{ label: 'Log a rehearsal', action: 'gig-rehearse', id: g.id }]).concat([{ label: 'Open Gig tracker', action: 'nav', view: 'music' }]) };
 }
 function cmdCleanInbox() {
   const st = S();
@@ -2199,7 +2201,7 @@ function loadFeedViaScript(url, anonymous) {
    other device's changes when opened or switched back to. Newest change wins. Calendar events,
    receipt files and your API key stay on each device. */
 /** Each device knows what it is, so sync messages can say "your phone" or "your Mac". */
-const APP_VERSION = '2026-10-27 · past gigs';   // shown in the sidebar and More, so you can check which version is running
+const APP_VERSION = '2026-10-31 · new icon';   // shown in the sidebar and More, so you can check which version is running
 const DEVICE_KEY = 'mitch-dashboard-device';
 function deviceName() {
   try { const n = localStorage.getItem(DEVICE_KEY); if (n) return n; } catch (e) {}
@@ -2333,6 +2335,7 @@ const FileSync = {
 const Reminders = {
   timer: null, last: null, error: null, count: 0,
   list() {
+    return [];   // to-do reminders retired with the to-do pages; sending an empty list clears the reminders calendar
     const soon = Date.now() - 60000;
     return S().tasks.filter(t => t.status === 'todo' && t.remindAt && new Date(t.remindAt).getTime() > soon)
       .map(t => ({ id: t.id, title: '⏰ ' + t.title, at: new Date(t.remindAt).toISOString(), notes: [t.notes, t.due ? `Due ${D.label(t.due)}` : ''].filter(Boolean).join('\n') }));
@@ -2661,7 +2664,7 @@ function renderNav() {
     today: { n: overdueIn(() => true), hot: true },
     inbox: { n: st.inbox.length },
     teaching: { n: open.filter(t => t.category === 'teaching' && isActionable(t)).length },
-    music: { n: open.filter(t => t.category === 'music' && isActionable(t)).length },
+    music: { n: st.gigs.filter(g => D.diff(g.date) < 0 && !g.invoiced && needsInvoice(g) && !g.reviewPending).length },
     life: { n: open.filter(t => ['personal', 'finance', 'home'].includes(t.category) || (t.category === 'health' && t.type !== 'workout')).filter(isActionable).length },
     fitness: { n: 0 },
     someday: { n: open.filter(t => t.category === 'someday').length + (st.boards.folders || []).length },
@@ -2669,7 +2672,7 @@ function renderNav() {
   };
   $('#nav').innerHTML = VIEWS.map(([id]) => { const label = esc(viewLabel(id));
     const c = counts[id];
-    const txt = id === 'today' ? (c.n ? `${c.n} late` : '') : (c.n || '');
+    const txt = id === 'today' ? '' : (c.n || '');
     return `<button data-action="nav" data-view="${id}" ${VIEW === id ? 'aria-current="page"' : ''}><span class="dot" style="background:${VIEW_DOT[id]}"></span>${label}<span class="count ${id === 'today' && c.n ? 'hot' : ''}">${txt}</span></button>`;
   }).join('');
 }
@@ -2778,7 +2781,7 @@ function render() {
   const dumpVal = $('#dump')?.value;
   renderNav(); renderCalStatus(); renderSyncStatus(); renderTabbar();
   { const v = $('#app-version'); if (v) v.textContent = 'Version ' + APP_VERSION; }
-  const v = { today: viewToday, inbox: viewInbox, teaching: viewTeaching, music: viewMusic, life: viewLife, budget: viewBudget, fitness: viewFitness, someday: viewSomeday }[VIEW];
+  const v = { today: viewSnapshot, inbox: viewInbox, teaching: viewTeaching, music: viewMusic, life: viewLife, budget: viewBudget, fitness: viewFitness, someday: viewSomeday }[VIEW];
   $('#view').innerHTML = v();
   if (dumpVal && $('#dump')) $('#dump').value = dumpVal;
   makePanelsCollapsible();
@@ -2790,6 +2793,78 @@ function render() {
 }
 
 /* --- Today --- */
+/* --- Snapshot: money first, then what's coming up --- */
+function viewSnapshot() {
+  const st = S(), T = D.today(), h = new Date().getHours(), greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const up = upcomingGigs(), next = up[0];
+  const owed = st.gigs.filter(awaitingPayment), owedSum = owed.reduce((a, g) => a + (gigFee(g) || 0), 0);
+  const toInv = st.gigs.filter(g => D.diff(g.date) < 0 && !g.invoiced && needsInvoice(g) && !g.reviewPending);
+  const bits = [];
+  if (next) bits.push(`Your next gig is <strong>${esc(venueBaseName(next.venue))}</strong> ${D.rel(next.date)}${gigFee(next) != null ? ` (${aud(gigFee(next))})` : ''}.`);
+  else bits.push('No gigs booked yet.');
+  if (owedSum) bits.push(`<strong>${aud(owedSum)}</strong> is owed to you across ${plural(owed.length, 'invoice')}.`);
+  if (toInv.length) bits.push(`<button class="linkbtn" data-action="nav" data-view="music"><span class="hot">${plural(toInv.length, 'gig')} to invoice</span></button>.`);
+  const month = up.filter(g => D.diff(g.date) <= 30), monthSum = month.reduce((a, g) => a + (gigFee(g) || 0), 0);
+  if (month.length) bits.push(`${plural(month.length, 'gig')} in the next 30 days${monthSum ? `, worth ${aud(monthSum)}` : ''}.`);
+  const rank = { high: 0, med: 1, low: 2 };
+  const todo = lifeAudit().filter(f => f.group === 'Money').sort((a, b) => rank[a.sev] - rank[b.sev]);
+  // Today: calendar events and gigs (dashboard to-dos are no longer used)
+  const evs = snapshotEvents();
+  const today = evs.filter(e => e.allDay ? e.date <= T && e.endDate >= T : e.date === T).filter(e => !(evKind(e) === 'bill' && st.calPaid[e.id])).map(e => ({ time: e.allDay ? null : e.time, title: e.title, sub: e.cal, color: evColor(e) }))
+    .concat(st.gigs.filter(g => g.date === T).map(g => ({ time: g.time, title: `Gig: ${venueBaseName(g.venue)}`, sub: feeText(g), color: gigColor(g) })))
+    .sort((a, b) => (a.time || '00').localeCompare(b.time || '00'));
+  // Coming up: gigs, calendar events and bills over two weeks
+  const calStart = D.weekStart(), weeks = new Date().getDay() % 6 === 0 ? 3 : 2, calEnd = D.add(calStart, weeks * 7 - 1);
+  const inRange = d => d && d >= calStart && d <= calEnd, events = [];
+  st.gigs.filter(x => inRange(x.date)).forEach(x => events.push({ color: gigColor(x), date: x.date, time: x.time, title: venueBaseName(x.venue), kind: 'gig', action: 'nav', data: 'data-view="music"', tip: `Gig: ${x.venue}${x.time ? ', ' + D.time(x.time) : ''}, ${feeText(x)}` }));
+  evs.filter(e => inRange(e.date) || (e.allDay && e.date < calStart && e.endDate >= calStart)).forEach(e => {
+    const k = evKind(e);
+    if (e.allDay && e.endDate > e.date && !/holiday/i.test(e.cal)) { for (let d = e.date < calStart ? calStart : e.date; d <= e.endDate && d <= calEnd; d = D.add(d, 1)) events.push({ color: evColor(e), date: d, title: e.title, kind: 'span', action: 'recat-open', data: `data-id="${esc(e.id)}"`, tip: `${e.title} (${D.label(e.date)} to ${D.label(e.endDate)})` }); return; }
+    events.push({ color: evColor(e), date: e.date, time: e.time, title: k === 'birthday' ? `${birthdayName(e.title)}'s birthday` : e.title, kind: k === 'birthday' ? 'birthday' : k === 'bill' ? 'bill' : k === 'holiday' ? 'holiday' : 'event', paid: k === 'bill' && st.calPaid[e.id], action: 'recat-open', data: `data-id="${esc(e.id)}"`, tip: `${e.title}${e.time ? ', ' + D.time(e.time) : ''}. ${e.cal}. Click to change what it is.` });
+  });
+  events.sort((a, b) => (a.time || '00').localeCompare(b.time || '00'));
+  const dayCells = [];
+  for (let d = calStart; d <= calEnd; d = D.add(d, 1)) {
+    const de = events.filter(e => e.date === d), n = D.diff(d), dd = D.parse(d), max = 4;
+    dayCells.push(`<div class="cal-day ${n === 0 ? 'is-today' : n < 0 ? 'is-past' : ''} ${dd.getDay() % 6 === 0 ? 'is-wkend' : ''}">
+      <div class="cal-date"><span>${dd.toLocaleDateString('en-AU', { weekday: 'short' })}</span><b>${dd.getDate()}</b>${dd.getDate() === 1 || d === calStart ? `<em>${dd.toLocaleDateString('en-AU', { month: 'short' })}</em>` : ''}</div>
+      ${de.slice(0, max).map(e => { const inner = `${e.time ? `<i>${D.time(e.time)}</i> ` : ''}${esc(e.title)}`; return `<button class="cal-ev k-${e.kind} ${e.color ? 'has-c' : ''} ${e.paid ? 'is-done' : ''}"${colorVar(e.color)} data-action="${e.action}" ${e.data} title="${esc(e.tip || e.title)}">${inner}</button>`; }).join('')}
+      ${de.length > max ? `<span class="cal-more" title="${esc(de.slice(max).map(e => e.title).join('\n'))}">+${de.length - max} more</span>` : ''}
+    </div>`);
+  }
+  const cals = st.calendar.enabled ? st.calendar.calendars.filter(c => c.role !== 'off' && calColor(c.id)) : [];
+  const tl = `<div class="cal-grid">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => `<div class="cal-wd">${w}</div>`).join('')}${dayCells.join('')}</div>
+    <div class="legend cal-legend">${cals.length ? cals.map(c => `<span><i class="sw" style="background:${calColor(c.id)}"></i>${esc(c.name)}</span>`).join('') : '<span><i class="k-gig"></i>Gig</span><span><i class="k-event"></i>Event</span><span><i class="k-bill"></i>Bill</span>'}</div>`;
+  const gigRow = g => `<li class="row"><span class="gig-dot ${gigColor(g) ? 'has-c' : ''}"${colorVar(gigColor(g))}></span><div class="row-main"><span class="row-title" style="cursor:default">${esc(venueBaseName(g.venue))}</span><div class="row-meta"><span>${D.label(g.date)}${g.time ? ', ' + D.time(g.time) : ''}</span>${D.diff(g.date) > 6 ? `<span>${D.rel(g.date)}</span>` : ''}</div></div><span class="chip">${gigFee(g) != null ? aud(gigFee(g)) : '<button class="linkbtn" data-action="gig-edit" data-id="' + g.id + '">Add fee</button>'}</span></li>`;
+  return `
+  <div class="vhead"><div><h1>${greet}, Mitch</h1><p>${D.long(T)}</p>${calLine()}</div></div>
+  ${location.protocol === 'https:' && !Cal.available && !Feed.url() ? `<div class="notice"><span><b>Using the dashboard on another device already?</b> Paste your calendar link in Calendar settings and your gigs, budget and invoices all come across.</span><button class="btn small primary" data-action="cal-open">Connect</button></div>` : ''}
+  ${st.isSample ? `<div class="notice"><span>You're looking at sample data so the dashboard doesn't start empty. Clear it when you're ready to use your own${st.calendar.enabled ? '; your calendar gigs and events stay' : ''}.</span><button class="btn small" data-action="clear-sample">Clear sample data</button></div>` : ''}
+  <p class="brief">${bits.join(' ')}</p>
+  <div class="grid g-2 section-gap">
+    ${moneySnapshot()}
+    <section class="panel"><h2>Needs doing</h2>
+      ${todo.length ? `<ul class="att">${todo.slice(0, 6).map(f => `<li class="${f.sev}"><div>${esc(f.text)}${f.actions.length ? `<div class="att-acts">${f.actions.slice(0, 2).map(a => `<button class="btn small ghost" data-action="${a.action}" ${a.id ? `data-id="${esc(a.id)}"` : ''} ${a.view ? `data-view="${a.view}"` : ''}>${esc(a.label)}</button>`).join('')}</div>` : ''}</div></li>`).join('')}</ul>${todo.length > 6 ? `<p class="muted" style="margin:8px 0 0">and ${todo.length - 6} more in the Gig tracker</p>` : ''}` : '<p class="empty">Nothing to chase. Every gig is invoiced and no bills are due.</p>'}
+    </section>
+    <section class="panel"><h2>Next gigs</h2>
+      ${up.length ? `<ul class="rows">${up.slice(0, 5).map(gigRow).join('')}</ul>` : '<p class="empty">No gigs booked.</p>'}
+      <p style="margin:10px 0 0"><button class="btn small ghost" data-action="nav" data-view="music">All gigs and payments</button></p>
+    </section>
+    <section class="panel"><h2>Today</h2>
+      ${today.length ? `<ul class="rows">${today.map(e => `<li class="row"><span class="when-col">${e.time ? D.time(e.time) : 'All day'}</span><div class="row-main"><span>${e.color ? `<i class="cdot" style="background:${e.color}"></i>` : ''}${esc(e.title)}</span><div class="row-meta"><span>${esc(e.sub || '')}</span></div></div></li>`).join('')}</ul>` : '<p class="empty">Nothing in your calendar today.</p>'}
+    </section>
+  </div>
+  <section class="panel section-gap"><h2>Coming up</h2>${tl}</section>`;
+}
+/** Calendar events for the Snapshot (including ones the old version turned into to-dos). */
+function snapshotEvents() {
+  const st = S().calendar; if (!st.enabled) return [];
+  const seen = new Set();
+  return st.calendars.filter(c => c.role === 'show' || c.role === 'gigs').flatMap(c => st.events[c.id] || [])
+    .filter(e => isQldRelevant(e.title, e.cal) && e.dest !== 'gig' && e.dest !== 'hidden' && e.dest !== 'skip' && !(e.dest == null && (st.calendars.find(c => c.id === e.calId) || {}).role === 'gigs'))
+    .filter(e => !seen.has(e.calId + e.id) && seen.add(e.calId + e.id))
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
+}
 function viewToday() {
   const st = S(), ctx = makeCtx(), T = D.today();
   const ranked = rankNow(ctx);
@@ -4195,7 +4270,7 @@ function viewMusic() {
   };
 
   return `
-  <div class="vhead"><div><h1>Music</h1><p>Gigs, venues and getting paid.</p></div><button class="btn" data-action="music-settings">Settings: setlists and checklists</button></div>
+  <div class="vhead"><div><h1>Gig tracker</h1><p>Gigs, venues and getting paid.</p></div><button class="btn" data-action="music-settings">Settings: setlists and checklists</button></div>
   ${quickAdd('music', 'e.g. Gig at The Northern on Saturday 8pm $400, or Learn Mr Brightside')}
   <section class="panel"><div class="teach-head"><h2>Upcoming gigs <span class="sub">${up.length ? plural(up.length, 'upcoming gig') : ''}</span></h2>
     ${up.length > 1 ? `<div class="inline-form"><button class="btn small ghost" data-action="gigs-all" data-open="1">Expand all</button><button class="btn small ghost" data-action="gigs-all" data-open="0">Collapse all</button></div>` : ''}</div>
@@ -5685,18 +5760,19 @@ function splitDump(txt) {
 let pendingTeachQ = null;
 function goTeachAsk() { go('teaching'); if (pendingTeachQ) { const q = pendingTeachQ; pendingTeachQ = null; teachSend(q); } }
 /* ---------- Phone: tab bar, More sheet, capture sheet ---------- */
-const TABS = [['today', 'Today'], ['teaching', 'Teaching'], ['music', 'Music'], ['life', 'Life'], ['more', 'More']];
+const TABS = [['today', 'Today'], ['music', 'Gig tracker'], ['budget', 'Budget'], ['more', 'More']];
 const TAB_ICONS = {
   today: '<path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"/>',
   teaching: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2.5 9 2.5 12 0v-5"/>',
+  budget: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/>',
   music: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
   life: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   more: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'
 };
 function renderTabbar() {
   const bar = $('#tabbar'); if (!bar) return;
-  const late = openTasks().filter(t => isActionable(t) && t.due && D.diff(t.due) < 0).length;
-  const inMore = !['today', 'teaching', 'music', 'life'].includes(VIEW);   // budget, fitness, someday, inbox live under More
+  const late = 0;
+  const inMore = !['today', 'music', 'budget'].includes(VIEW);
   bar.innerHTML = TABS.map(([id, label]) => {
     const on = id === 'more' ? inMore : VIEW === id;
     return `<button data-action="${id === 'more' ? 'more-open' : 'nav'}" data-view="${id}" ${on ? 'aria-current="page"' : ''}>
@@ -5708,14 +5784,9 @@ function openMoreSheet() {
   const item = (action, label, sub, extra = '') => `<button class="sheet-item" data-action="${action}" ${extra}><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
   $('#overlay').innerHTML = `<div class="scrim sheet-scrim" data-action="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="More">
     <div class="sheet-grab" aria-hidden="true"></div>
-    ${item('nav', esc(viewLabel('inbox')), inboxN ? plural(inboxN, 'unsorted thought') : 'Dump thoughts and sort them', 'data-view="inbox"')}
-    ${item('nav', esc(viewLabel('budget')), 'This fortnight’s money', 'data-view="budget"')}
-    ${item('nav', esc(viewLabel('fitness')), 'Workouts, lifts and weight', 'data-view="fitness"')}
-    ${item('nav', esc(viewLabel('someday')), 'Ideas and projects', 'data-view="someday"')}
     ${item('tile-arrange', arranging ? 'Close page settings' : 'Page settings', 'Rename this page, reorder and rename tiles')}
     <div class="sheet-sep"></div>
     ${item('cal-open', 'Calendar and sync', Sync.error || (Sync.lastOk ? `This ${deviceName()}: synced ${agoText(Sync.lastOk)}` : Cal.firstError() || ''))}
-    ${item('ai-settings', 'Teaching partner settings', '')}
     ${item('theme', 'Switch light or dark', '')}
     ${item('export', 'Export a backup', '')}
     ${item('import', 'Import a backup', '')}
