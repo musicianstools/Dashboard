@@ -2225,7 +2225,7 @@ function loadFeedViaScript(url, anonymous) {
    other device's changes when opened or switched back to. Newest change wins. Calendar events,
    receipt files and your API key stay on each device. */
 /** Each device knows what it is, so sync messages can say "your phone" or "your Mac". */
-const APP_VERSION = '2026-11-11 · zero out remaining';   // shown in the sidebar and More, so you can check which version is running
+const APP_VERSION = '2026-11-11 · forecast uses variable budget';   // shown in the sidebar and More, so you can check which version is running
 const DEVICE_KEY = 'mitch-dashboard-device';
 function deviceName() {
   try { const n = localStorage.getItem(DEVICE_KEY); if (n) return n; } catch (e) {}
@@ -4809,7 +4809,9 @@ function budForecast(fn) {
   const booked = S().gigs.filter(g => g.date >= nx.start && g.date <= last && !g.paid && gigFee(g) != null);
   const bookedSum = r2(booked.reduce((a, g) => a + (gigFee(g) || 0), 0));
   const carried = r2(nx.income.filter(x => /^carried over/i.test(x.name)).reduce((a, x) => a + (+x.amount || 0), 0));
-  return { nx, w, t, fixed: nonGoal('fixed'), variable: nonGoal('variable'), seasonal: nonGoal('seasonal'), goals, goalSum, bills, booked, bookedSum, carried };
+  // Variable spending (groceries, leisure…) isn't known until the period's over, so project the full Budget per period.
+  const variable = r2(nx.items.filter(i => i.sec === 'variable' && !isGoal(i)).reduce((a, i) => a + (+i.budget || 0), 0));
+  return { nx, w, t, fixed: nonGoal('fixed'), variable, seasonal: nonGoal('seasonal'), goals, goalSum, bills, booked, bookedSum, carried };
 }
 function forecastTile(fn) {
   const f = budForecast(fn), { t, w } = f, out = r2(f.fixed + f.variable + f.seasonal + f.goalSum), left = r2(t.income - out);
@@ -4825,7 +4827,7 @@ function forecastTile(fn) {
     <div class="fc-cols">
       <div><h3 class="ms-h">Spending</h3><ul class="rows">
         ${line('Core expenses (Fixed)', f.fixed, f.bills.length ? `${plural(f.bills.length, 'bill')} due: ${esc(listJoin(f.bills.slice(0, 3).map(b => `${b.name} ${D.parse(b.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`)))}${f.bills.length > 3 ? '…' : ''}` : '')}
-        ${line('Core expenses (Variable)', f.variable)}
+        ${line('Core expenses (Variable)', f.variable, `your full Budget per ${pAbbr(f.nx)}`)}
         ${line('Seasonal and upcoming', f.seasonal, 'not counting saving goals')}
         ${line('<b>Saving goals</b>', f.goalSum)}
       </ul></div>
