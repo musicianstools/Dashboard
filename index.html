@@ -803,6 +803,8 @@ tr.bdrop-after td{box-shadow:inset 0 -3px 0 var(--accent)}
 .goal-tools .linkbtn:disabled{opacity:.25;cursor:default}
 .gc-target{stroke:var(--muted);stroke-dasharray:4 4;stroke-width:1;vector-effect:non-scaling-stroke}.gc-due{stroke:var(--pri,#E4572E);stroke-dasharray:3 3;stroke-width:1;vector-effect:non-scaling-stroke}
 .bud-warn{margin:0 0 14px}
+.fc-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:6px}.fc-cols .rows .row{align-items:center}
+@media (max-width:760px){.fc-cols{grid-template-columns:1fr}}
 @media (max-width:700px){.bs-row{grid-template-columns:1fr 96px}.bs-row b{grid-column:1/-1}.bs-cat{grid-template-columns:34px 1fr 80px;}.bs-cat .bs-hide,.bs-cat select,.bs-cat .bs-move{grid-column:auto}}
 .recat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
 </style>
@@ -2221,7 +2223,7 @@ function loadFeedViaScript(url, anonymous) {
    other device's changes when opened or switched back to. Newest change wins. Calendar events,
    receipt files and your API key stay on each device. */
 /** Each device knows what it is, so sync messages can say "your phone" or "your Mac". */
-const APP_VERSION = '2026-11-11 · restore goals';   // shown in the sidebar and More, so you can check which version is running
+const APP_VERSION = '2026-11-11 · next fortnight forecast';   // shown in the sidebar and More, so you can check which version is running
 const DEVICE_KEY = 'mitch-dashboard-device';
 function deviceName() {
   try { const n = localStorage.getItem(DEVICE_KEY); if (n) return n; } catch (e) {}
@@ -4577,6 +4579,8 @@ function newFortnight(from, start) {
       if (i.pausedUntil && i.pausedUntil <= start) delete i.pausedUntil;
       if (goalPaused(i, fn)) { i.transferred = 0; return; }
       if (i.autoFill !== false && i.due && +i.target) { const need = goalNeed(i, fn); if (need != null) { i.budget = need; i.transferred = need; } }
+      // A goal's Budget per period is what goes in each period (not a level to top up to), until the target's reached.
+      else if (+i.budget > 0) i.transferred = +i.target ? Math.min(+i.budget, Math.max(0, r2(+i.target - (+i.saved || 0)))) : +i.budget;
     });
   } else {
     fn.income = ['Salary', 'Doordash', 'Gigs', 'Other'].map(n => { const m = incMode(n), x = { id: uid('bi'), name: n, amount: m.mode === 'fixed' ? r2(+m.amount || 0) : 0 }; if (m.mode === 'gigs') x.auto = 'gigs'; return x; });
@@ -4799,6 +4803,49 @@ function openGoalSettings(fnId, id) {
     ${paused ? `<p style="margin:0 0 8px">Paused until ${D.label(i.pausedUntil)}. Nothing goes in until then${i.due ? ', and the amount per ' + w + ' catches up afterwards' : ''}.</p><button class="btn small" data-action="goal-pause" data-fn="${fn.id}" data-id="${i.id}" data-n="0">Resume now</button>`
       : `<p class="muted" style="margin:0 0 8px;font-size:14px">Skip this goal while money's tight. ${i.due ? 'The due-date maths catches up afterwards.' : ''}</p><div class="inline-form"><button class="btn small" data-action="goal-pause" data-fn="${fn.id}" data-id="${i.id}" data-n="1">Pause this ${w}</button><button class="btn small" data-action="goal-pause" data-fn="${fn.id}" data-id="${i.id}" data-n="2">Pause 2 ${w}s</button></div>`}
   </div></div>`;
+}
+
+/* ---------- Next period forecast: what starting it would look like today ---------- */
+function budForecast(fn) {
+  const nx = newFortnight(fn, fnEnd(fn)); delete nx._msg;
+  const t = budTotals(nx), w = pWord(nx), last = fnLast(nx);
+  const nonGoal = sec => r2(nx.items.filter(i => i.sec === sec && !isGoal(i)).reduce((a, i) => a + budTr(i), 0));
+  const goals = sortGoals(nx.items.filter(i => isGoal(i))).map(i => {
+    const info = goalInfo(i, nx), tr = budTr(i);
+    const why = goalPaused(i, nx) ? `Paused until ${D.label(i.pausedUntil)}` : (+i.target && (+i.saved || 0) >= +i.target) ? 'Already reached' : i.due && +i.target && i.autoFill !== false ? `To reach ${money2(+i.target).replace('.00', '')} by ${D.parse(i.due).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}` : 'Your usual amount';
+    return { name: goalName(i), tr, why, saved: +i.saved || 0, target: +i.target || 0, status: info.status };
+  });
+  const goalSum = r2(goals.reduce((a, g) => a + g.tr, 0));
+  const bills = budSet().bills.flatMap(b => billDues(b, nx.start, last).map(d => ({ name: b.name, amount: +b.amount || 0, date: d })))
+    .concat(allCalEvents().filter(e => evKind(e) === 'bill' && e.date >= nx.start && e.date <= last && !budSet().bills.some(b => b.name.toLowerCase() === (e.title || '').toLowerCase())).map(e => ({ name: e.title.replace(/\s*\$\s?[\d,]+(\.\d+)?/, '').trim() || e.title, amount: +e.amount || 0, date: e.date })))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const booked = S().gigs.filter(g => g.date >= nx.start && g.date <= last && !g.paid && gigFee(g) != null);
+  const bookedSum = r2(booked.reduce((a, g) => a + (gigFee(g) || 0), 0));
+  const carried = r2(nx.income.filter(x => /^carried over/i.test(x.name)).reduce((a, x) => a + (+x.amount || 0), 0));
+  return { nx, w, t, fixed: nonGoal('fixed'), variable: nonGoal('variable'), seasonal: nonGoal('seasonal'), goals, goalSum, bills, booked, bookedSum, carried };
+}
+function forecastTile(fn) {
+  const f = budForecast(fn), { t, w } = f, out = r2(f.fixed + f.variable + f.seasonal + f.goalSum), left = r2(t.income - out);
+  const line = (l, v, sub = '') => `<li class="row"><div class="row-main"><span>${l}</span>${sub ? `<div class="row-meta"><span>${sub}</span></div>` : ''}</div><b class="ms-amt">${money2(v)}</b></li>`;
+  return `<section class="panel"><h2>Next ${w}: forecast</h2>
+    <p class="muted" style="margin:-4px 0 10px;font-size:13px"><b>${fnLabel(f.nx)}.</b> What starting next ${w} would look like if you started it now, using your saving goals, repeating bills and Budget settings. It updates as this ${w} changes.</p>
+    <div class="money bud-sum fc-sum">
+      <div><span>Expected income</span><b>${money2(t.income)}</b><small>${f.carried ? `incl. ${money2(f.carried)} carried over` : budSet().leftover === 'goal' ? 'leftover goes to goals' : ''}</small></div>
+      <div><span>Total going out</span><b>${money2(out)}</b><small>every item, incl. saving goals</small></div>
+      <div><span>Into saving goals</span><b>${money2(f.goalSum)}</b><small>${plural(f.goals.filter(g => g.tr > 0).length, 'goal')}</small></div>
+      <div class="rem ${left < -0.004 ? 'bad' : 'left'}"><span>${left < -0.004 ? 'Short by' : 'Left over'}</span><b>${money2(Math.abs(left))}</b><small>${f.bookedSum ? `${money2(f.bookedSum)} more if booked gigs are paid in time` : left < -0.004 ? 'before any gig income' : ''}</small></div>
+    </div>
+    <div class="fc-cols">
+      <div><h3 class="ms-h">Spending</h3><ul class="rows">
+        ${line('Core expenses (Fixed)', f.fixed, f.bills.length ? `${plural(f.bills.length, 'bill')} due: ${esc(listJoin(f.bills.slice(0, 3).map(b => `${b.name} ${D.parse(b.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`)))}${f.bills.length > 3 ? '…' : ''}` : '')}
+        ${line('Core expenses (Variable)', f.variable)}
+        ${line('Seasonal and upcoming', f.seasonal, 'not counting saving goals')}
+        ${line('<b>Saving goals</b>', f.goalSum)}
+      </ul></div>
+      <div><h3 class="ms-h">Saving goals</h3>${f.goals.length ? `<ul class="rows">${f.goals.map(g => `<li class="row"><div class="row-main"><span>${esc(g.name)}</span><div class="row-meta"><span>${esc(g.why)}</span>${g.target ? `<span>${money2(Math.min(g.saved + g.tr, g.target) || g.saved + g.tr).replace('.00', '')} of ${money2(g.target).replace('.00', '')} after</span>` : ''}</div></div><b class="ms-amt">${money2(g.tr)}</b></li>`).join('')}</ul>` : '<p class="empty">No saving goals.</p>'}</div>
+    </div>
+    ${f.booked.length ? `<p class="muted" style="margin:10px 0 0;font-size:13px">Booked gigs that ${w}: ${esc(listJoin(f.booked.map(g => `${venueBaseName(g.venue)} ${money2(gigFee(g)).replace('.00', '')}`)))}. They count as income once they're marked paid.</p>` : ''}
+  </section>`;
 }
 
 /* ---------- Budget settings window ---------- */
@@ -5104,6 +5151,7 @@ function viewBudget() {
   </section>
   ${BUD_SECS.map(([k, l]) => budSectionTile(fn, k, l, t)).join('')}
   ${goalsTile(fn)}
+  ${i === fns.length - 1 ? forecastTile(fn) : ''}
   ${budSpendTile(fn)}
   <section class="panel"><h2>All ${w}s</h2>
     <div class="scroll-x"><table class="tbl"><thead><tr><th>${cap(w)}</th><th class="num">Income</th><th class="num">Transferred</th><th class="num">Actual used</th><th class="num">Remaining</th></tr></thead><tbody>
