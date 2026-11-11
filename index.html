@@ -784,6 +784,25 @@ tr.bdrop-after td{box-shadow:inset 0 -3px 0 var(--accent)}
 .todo-add input[type=date]{flex:0 0 auto;width:auto;padding:6px 8px;font-size:14px;color:var(--ink-2)}
 .app-version{display:block;font-size:11.5px;color:var(--muted);padding:6px 10px 0;opacity:.8}
 .gig-dot{width:10px;height:10px;border-radius:50%;background:var(--c-music);flex:0 0 auto;align-self:center;margin-right:2px}.gig-dot.has-c{background:var(--ev)}
+.bs-h{font-size:15px;margin:22px 0 8px;padding-top:14px;border-top:1px solid var(--line)}
+.bs-modal .bs-h:first-of-type{border-top:0;padding-top:0;margin-top:8px}
+.bs-note{font-size:13px;margin:8px 0 0}
+.bs-rows{display:grid;gap:8px}.bs-row{display:grid;grid-template-columns:minmax(110px,1fr) minmax(170px,1.3fr) 110px;gap:8px;align-items:center}
+.bs-radio{display:grid;gap:6px}.bs-radio label{display:flex;gap:8px;align-items:center}
+.bs-cats{display:grid;gap:6px}.bs-cat{display:grid;grid-template-columns:34px minmax(120px,1fr) 90px auto minmax(110px,150px) auto;gap:8px;align-items:center}
+.bs-cat.is-hidden>input.input{opacity:.55}.bs-col{width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer}
+.bs-hide{display:flex;gap:5px;align-items:center;font-size:13px;color:var(--muted)}.bs-move{display:flex;gap:2px}
+.bs-bills .input{min-width:0}.bs-bills td{vertical-align:middle}
+.bnum-auto{display:inline-flex;flex-direction:column;align-items:flex-end;font-weight:600}.bnum-auto small{font-weight:400;color:var(--muted);font-size:12px}
+.bill-note{color:var(--ink-2)}
+.goal-st{font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--surface-2);margin-left:6px}
+.goal-st.ok{background:color-mix(in srgb,var(--ok,#3A8660) 16%,transparent);color:var(--ok,#3A8660)}.goal-st.bad{background:color-mix(in srgb,var(--pri,#E4572E) 16%,transparent);color:var(--pri,#E4572E)}.goal-st.muted{color:var(--muted)}
+.goal-tools{display:inline-flex;gap:4px;margin-left:6px}.goal-tools .linkbtn{padding:0 4px}
+.goal.is-paused{opacity:.75}
+.goal-chart{display:block;width:100%;height:56px;margin-top:6px}.gc-line{fill:none;stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke}.gc-dot{fill:none;stroke:var(--accent);stroke-width:7;stroke-linecap:round;vector-effect:non-scaling-stroke}.goal-tools .linkbtn:disabled{opacity:.25;cursor:default}
+.gc-target{stroke:var(--muted);stroke-dasharray:4 4;stroke-width:1;vector-effect:non-scaling-stroke}.gc-due{stroke:var(--pri,#E4572E);stroke-dasharray:3 3;stroke-width:1;vector-effect:non-scaling-stroke}
+.bud-warn{margin:0 0 14px}
+@media (max-width:700px){.bs-row{grid-template-columns:1fr 96px}.bs-row b{grid-column:1/-1}.bs-cat{grid-template-columns:34px 1fr 80px;}.bs-cat .bs-hide,.bs-cat select,.bs-cat .bs-move{grid-column:auto}}
 .recat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
 </style>
 </head>
@@ -2201,7 +2220,7 @@ function loadFeedViaScript(url, anonymous) {
    other device's changes when opened or switched back to. Newest change wins. Calendar events,
    receipt files and your API key stay on each device. */
 /** Each device knows what it is, so sync messages can say "your phone" or "your Mac". */
-const APP_VERSION = '2026-10-31 · new icon';   // shown in the sidebar and More, so you can check which version is running
+const APP_VERSION = '2026-11-11 · budget settings and goals';   // shown in the sidebar and More, so you can check which version is running
 const DEVICE_KEY = 'mitch-dashboard-device';
 function deviceName() {
   try { const n = localStorage.getItem(DEVICE_KEY); if (n) return n; } catch (e) {}
@@ -2807,7 +2826,8 @@ function viewSnapshot() {
   const month = up.filter(g => D.diff(g.date) <= 30), monthSum = month.reduce((a, g) => a + (gigFee(g) || 0), 0);
   if (month.length) bits.push(`${plural(month.length, 'gig')} in the next 30 days${monthSum ? `, worth ${aud(monthSum)}` : ''}.`);
   const rank = { high: 0, med: 1, low: 2 };
-  const todo = lifeAudit().filter(f => f.group === 'Money').sort((a, b) => rank[a.sev] - rank[b.sev]);
+  const curFn = budFns().slice().reverse().find(f => f.start <= T && T < fnEnd(f));
+  const todo = budWarnings(curFn).map(x => ({ ...x, actions: [{ label: 'Open Budget', action: 'nav', view: 'budget' }] })).concat(lifeAudit().filter(f => f.group === 'Money')).sort((a, b) => rank[a.sev] - rank[b.sev]);
   // Today: calendar events and gigs (dashboard to-dos are no longer used)
   const evs = snapshotEvents();
   const today = evs.filter(e => e.allDay ? e.date <= T && e.endDate >= T : e.date === T).filter(e => !(evKind(e) === 'bill' && st.calPaid[e.id])).map(e => ({ time: e.allDay ? null : e.time, title: e.title, sub: e.cal, color: evColor(e) }))
@@ -4270,7 +4290,7 @@ function viewMusic() {
   };
 
   return `
-  <div class="vhead"><div><h1>Gig tracker</h1><p>Gigs, venues and getting paid.</p></div><button class="btn" data-action="music-settings">Settings: setlists and checklists</button></div>
+  <div class="vhead"><div><h1>Gig tracker</h1><p>Gigs, venues and getting paid.</p></div><div class="inline-form"><button class="btn primary" data-action="gig-new">+ Add gig</button><button class="btn" data-action="music-settings">Settings: setlists and checklists</button></div></div>
   ${quickAdd('music', 'e.g. Gig at The Northern on Saturday 8pm $400, or Learn Mr Brightside')}
   <section class="panel"><div class="teach-head"><h2>Upcoming gigs <span class="sub">${up.length ? plural(up.length, 'upcoming gig') : ''}</span></h2>
     ${up.length > 1 ? `<div class="inline-form"><button class="btn small ghost" data-action="gigs-all" data-open="1">Expand all</button><button class="btn small ghost" data-action="gigs-all" data-open="0">Collapse all</button></div>` : ''}</div>
@@ -4505,9 +4525,10 @@ const BUD_TYPES_BASE = [
   ['other', 'Other', '#9CA3AF', null]
 ];
 /** Built-in types plus any you've added yourself. */
-const budTypes = () => { const own = (S().budget.customTypes || []).map(t => [t.k, t.label, t.color, null]); return BUD_TYPES_BASE.slice(0, -1).concat(own, [BUD_TYPES_BASE[BUD_TYPES_BASE.length - 1]]); };
+const budTypes = () => budCatsAll().map(c => [c.k, c.label, c.color, c.re]);
+const budTypesPick = cur => budCatsAll().filter(c => !c.hidden || c.k === cur).map(c => [c.k, c.label, c.color, c.re]);
 const BUD_TYPES = BUD_TYPES_BASE;
-const budTypeOf = i => { if (i.type && budTypes().some(t => t[0] === i.type)) return i.type; return (BUD_TYPES_BASE.find(t => t[3] && t[3].test(i.name)) || BUD_TYPES_BASE[BUD_TYPES_BASE.length - 1])[0]; };
+const budTypeOf = i => { if (i.type) { const k = budAlias(i.type); if (budCatsAll().some(t => t.k === k)) return k; } const hit = BUD_TYPES_BASE.find(t => t[3] && t[3].test(i.name)); return budAlias(hit ? hit[0] : 'other'); };
 const BUD_SECS = [['fixed', 'Core expenses (Fixed)'], ['variable', 'Core expenses (Variable)'], ['seasonal', 'Seasonal and upcoming']];
 const r2 = n => Math.round((+n || 0) * 100) / 100;
 const money2 = n => (n < 0 ? '−' : '') + '$' + Math.abs(r2(n)).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -4521,43 +4542,65 @@ function budActive() {
   return f;
 }
 function budTotals(fn) {
-  const income = r2(fn.income.reduce((a, i) => a + (+i.amount || 0), 0));
+  const income = r2(fn.income.reduce((a, i) => a + incAmt(fn, i), 0));
   const allocated = r2(fn.items.reduce((a, i) => a + budTr(i), 0)), spent = r2(fn.items.reduce((a, i) => a + (+i.actual || 0), 0));
   const bySec = Object.fromEntries(BUD_SECS.map(([k]) => [k, { tr: r2(fn.items.filter(i => i.sec === k).reduce((a, i) => a + budTr(i), 0)), actual: r2(fn.items.filter(i => i.sec === k).reduce((a, i) => a + (+i.actual || 0), 0)), budget: r2(fn.items.filter(i => i.sec === k).reduce((a, i) => a + (+i.budget || 0), 0)) }]));
   return { income, allocated, spent, remaining: r2(income - allocated), bySec };
 }
-const fnEnd = fn => D.add(fn.start, 14);
+const fnEnd = fn => stepPeriod(fn.start, fnCycle(fn));
 const fnLabel = fn => { const a = D.parse(fn.start), b = D.parse(fnEnd(fn)); const f = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long' }); return `${f(a)} – ${f(b)}`; };
 /** Paydays from your calendar ("Payday" events) help pick where a fortnight starts. */
-function lastPayday() { const pd = allCalEvents().filter(e => /pay ?day/i.test(e.title) && e.date <= D.today()).map(e => e.date).sort(); return pd[pd.length - 1] || null; }
+function lastPayday() { const pd = paydayDates(D.add(D.today(), -400), D.today()); return pd[pd.length - 1] || null; }
 function newFortnight(from, start) {
-  const fn = { id: uid('fn'), start, income: [], items: [] };
+  const set = budSet(), fn = { id: uid('fn'), start, cycle: set.cycle, income: [], items: [] };
   if (from) {
-    fn.income = from.income.filter(i => !/^carried over/i.test(i.name)).map(i => ({ id: uid('bi'), name: i.name, amount: /salary|wage|pay/i.test(i.name) ? +i.amount || 0 : 0 }));
-    const left = budTotals(from).remaining;
-    if (left > 0.004) fn.income.push({ id: uid('bi'), name: 'Carried over from last fortnight', amount: r2(left) });
+    fn.income = from.income.filter(i => !/^carried over/i.test(i.name)).map(i => {
+      const m = incMode(i.name), x = { id: uid('bi'), name: i.name, amount: 0 };
+      if (m.mode === 'keep') x.amount = r2(incAmt(from, i)); else if (m.mode === 'fixed') x.amount = r2(+m.amount || 0); else if (m.mode === 'gigs') x.auto = 'gigs';
+      return x;
+    });
     fn.items = from.items.filter(i => !(isGoal(i) && i.achieved) && (i.sec !== 'seasonal' || budLeft(i) > 0.004 || isGoal(i)))
-      .map(i => ({ id: uid('bb'), sec: i.sec, name: i.name, budget: +i.budget || 0, saved: Math.max(0, budLeft(i)), transferred: null, actual: null, goal: i.goal, target: i.target, note: i.note, type: i.type }));
+      .map(i => { const x = { id: uid('bb'), sec: i.sec, name: i.name, budget: +i.budget || 0, saved: Math.max(0, budLeft(i)), transferred: null, actual: null, goal: i.goal, target: i.target, note: i.note, type: i.type };
+        ['billId', 'due', 'autoFill', 'priority', 'pausedUntil'].forEach(k => { if (i[k] != null) x[k] = i[k]; }); return x; });
+    // Unallocated money: carry it, give it to goals (top priority first), or let it go.
+    let left = r2(budTotals(from).remaining), toGoals = 0;
+    if (left > 0.004 && set.leftover === 'goal') sortGoals(fn.items.filter(i => isGoal(i) && !goalPaused(i, fn))).forEach(i => {
+      if (left <= 0.004) return; const room = +i.target ? Math.max(0, r2(+i.target - i.saved)) : left, put = r2(Math.min(left, room));
+      if (put > 0) { i.saved = r2(i.saved + put); left = r2(left - put); toGoals = r2(toGoals + put); }
+    });
+    if (left > 0.004 && set.leftover !== 'none') fn.income.push({ id: uid('bi'), name: `Carried over from last ${pWord(from)}`, amount: r2(left) });
+    fn._msg = toGoals ? `${money2(toGoals)} of leftover went to your saving goals` : set.leftover === 'none' && left > 0.004 ? `${money2(left)} leftover wasn't carried over` : '';
+    // Goals: pauses end, and auto-fill works out this period's amount from the due date.
+    fn.items.forEach(i => {
+      if (!isGoal(i)) return;
+      if (i.pausedUntil && i.pausedUntil <= start) delete i.pausedUntil;
+      if (goalPaused(i, fn)) { i.transferred = 0; return; }
+      if (i.autoFill !== false && i.due && +i.target) { const need = goalNeed(i, fn); if (need != null) { i.budget = need; i.transferred = need; } }
+    });
   } else {
-    fn.income = ['Salary', 'Doordash', 'Gigs', 'Other'].map(n => ({ id: uid('bi'), name: n, amount: 0 }));
+    fn.income = ['Salary', 'Doordash', 'Gigs', 'Other'].map(n => { const m = incMode(n), x = { id: uid('bi'), name: n, amount: m.mode === 'fixed' ? r2(+m.amount || 0) : 0 }; if (m.mode === 'gigs') x.auto = 'gigs'; return x; });
   }
+  applyBills(fn);
   return fn;
 }
-function gigsPaidIn(fn) { const a = fn.start, b = D.add(fn.start, 13); return S().gigs.filter(g => g.paid && (g.paidAt || g.date) >= a && (g.paidAt || g.date) <= b); }
+function gigsPaidIn(fn) { const a = fn.start, b = fnLast(fn); return S().gigs.filter(g => g.paid && (g.paidAt || g.date) >= a && (g.paidAt || g.date) <= b); }
 function billsIn(fn) {
-  const a = fn.start, b = D.add(fn.start, 13), have = new Set(fn.items.map(i => i.name.toLowerCase()));
+  const a = fn.start, b = fnLast(fn), have = new Set(fn.items.map(i => i.name.toLowerCase()));
+  const rep = budSet().bills.flatMap(bl => billDues(bl, a, b).map(d => ({ id: `rb:${bl.id}:${d}`, name: bl.name, amount: +bl.amount || 0, date: d, paid: !!S().calPaid[`rb:${bl.id}:${d}`], color: null, repeat: true })));
+  const repNames = new Set(rep.map(x => x.name.toLowerCase()));
   return allCalEvents().filter(e => evKind(e) === 'bill' && e.date >= a && e.date <= b)
     .map(e => ({ id: e.id, name: e.title.replace(/\$\s?[\d,]+(\.\d+)?/, '').replace(/\s+(comes out|due)\s*$/i, '').trim() || e.title, amount: e.amount || 0, date: e.date, paid: !!S().calPaid[e.id], color: evColor(e) }))
+    .filter(x => !repNames.has(x.name.toLowerCase())).concat(rep).sort((x, y) => x.date.localeCompare(y.date))
     .map(x => ({ ...x, inBudget: have.has(x.name.toLowerCase()) }));
 }
 const bNum = (v, fid, ph, extra = '') => `<input class="input bnum" inputmode="decimal" data-change="bud-field" data-fid="${fid}" value="${v == null || v === '' ? '' : r2(v).toFixed(2)}" placeholder="${ph ?? ''}" ${extra}>`;
 function budSectionTile(fn, sec, label, t) {
   const items = fn.items.filter(i => i.sec === sec);
   return `<section class="panel"><h2>${label}</h2>
-    <div class="scroll-x"><table class="tbl btbl bsec" data-bsec-table="${sec}"><thead><tr><th>Item</th><th class="num">Budget per FN</th><th class="num">Current saved</th><th class="num">Transferred</th><th class="num">Actual used</th><th class="num">% of income</th><th></th></tr></thead><tbody>
+    <div class="scroll-x"><table class="tbl btbl bsec" data-bsec-table="${sec}"><thead><tr><th>Item</th><th class="num">Budget per ${pAbbr(fn)}</th><th class="num">Current saved</th><th class="num">Transferred</th><th class="num">Actual used</th><th class="num">% of income</th><th></th></tr></thead><tbody>
     ${items.map(i => `<tr class="bitem" data-bitem="${i.id}" data-bsec="${sec}">
-      <td class="bcell-name"><div class="bname-wrap"><button class="drag-h" data-bdrag="${i.id}" data-bkind="item" tabindex="-1" aria-hidden="true" title="Drag to move">⠿</button><input class="input bname" data-change="bud-field" data-fid="i:${i.id}:name" value="${esc(i.name)}" aria-label="Item name">${isGoal(i) ? `<span class="goal-dot" title="${i.achieved ? 'Goal achieved' : `Saving goal${i.target ? `: ${money2(i.target)}` : ''}`}">${i.achieved ? '🎉' : '🎯'}</span>` : ''}<button class="bnote-btn ${i.note ? 'has' : ''}" tabindex="-1" data-action="bud-note" data-id="${i.id}" aria-label="Notes for ${esc(i.name)}" title="${i.note ? esc(i.note) : 'Add a note'}">✎</button></div>${i.note ? `<div class="bnote">${esc(i.note)}</div>` : ''}</td>
-      <td class="num" data-label="Budget per FN">${bNum(i.budget, `i:${i.id}:budget`, '0')}</td>
+      <td class="bcell-name"><div class="bname-wrap"><button class="drag-h" data-bdrag="${i.id}" data-bkind="item" tabindex="-1" aria-hidden="true" title="Drag to move">⠿</button><input class="input bname" data-change="bud-field" data-fid="i:${i.id}:name" value="${esc(i.name)}" aria-label="Item name">${isGoal(i) ? `<span class="goal-dot" title="${i.achieved ? 'Goal achieved' : `Saving goal${i.target ? `: ${money2(i.target)}` : ''}`}">${i.achieved ? '🎉' : '🎯'}</span>` : ''}<button class="bnote-btn ${i.note ? 'has' : ''}" tabindex="-1" data-action="bud-note" data-id="${i.id}" aria-label="Notes for ${esc(i.name)}" title="${i.note ? esc(i.note) : 'Add a note'}">✎</button></div>${(() => { const bl = billFor(i); if (!bl) return ''; const due = billDues(bl, fn.start, fnLast(fn)); return `<div class="bnote bill-note">🔁 ${esc(BILL_EVERY.find(x => x[0] === bl.every)[1])} ${money2(+bl.amount || 0).replace('.00', '')}${due.length ? ` · <b>due ${D.label(due[0])}</b>` : ` · next due ${D.label(billDues(bl, fn.start, D.add(fn.start, 800))[0] || bl.first)}`}</div>`; })()}${i.note ? `<div class="bnote">${esc(i.note)}</div>` : ''}</td>
+      <td class="num" data-label="Budget per ${pAbbr(fn)}">${bNum(i.budget, `i:${i.id}:budget`, '0')}</td>
       <td class="num" data-label="Current saved">${bNum(i.saved, `i:${i.id}:saved`, '0')}</td>
       <td class="num" data-label="Transferred">${i.transferred == null || i.transferred === '' ? `<input class="input bnum is-auto" inputmode="decimal" data-change="bud-field" data-fid="i:${i.id}:transferred" value="${budTr(i).toFixed(2)}" title="Budget − Current saved. Type a different amount to override." data-auto="${budTr(i).toFixed(2)}">` : bNum(i.transferred, `i:${i.id}:transferred`, '0', `title="Typed amount. Clear it to go back to Budget − Current saved."`)}</td>
       <td class="num" data-label="Actual used">${bNum(i.actual, `i:${i.id}:actual`, '—')}</td>
@@ -4568,33 +4611,254 @@ function budSectionTile(fn, sec, label, t) {
     <form class="inline-form" data-form="bud-add" data-sec="${sec}" style="margin-top:10px"><input class="input" name="name" placeholder="Add an item, e.g. ${sec === 'fixed' ? 'Rent' : sec === 'variable' ? 'Groceries' : 'Strings, or SG1 - New computer'}" aria-label="New item"><input class="input bnum" name="budget" inputmode="decimal" placeholder="Budget" aria-label="Budget"><button class="btn small" type="submit">Add</button></form>
   </section>`;
 }
+/* ---------- Budget settings: pay cycle, income, leftovers, categories, repeating bills, warnings ---------- */
+function budSet() {
+  const b = S().budget; if (!b.settings || typeof b.settings !== 'object') b.settings = {};
+  const s = b.settings;
+  if (!s.cycle) s.cycle = 'fortnight';
+  if (!s.leftover) s.leftover = 'carry';
+  if (s.warnAt == null) s.warnAt = 90;
+  ['income', 'cats', 'alias'].forEach(k => { if (!s[k] || typeof s[k] !== 'object') s[k] = {}; });
+  if (!Array.isArray(s.bills)) s.bills = [];
+  if (!Array.isArray(b.doneGoals)) b.doneGoals = [];
+  return s;
+}
+const CYCLES = { week: ['week', 'wk', 7], fortnight: ['fortnight', 'FN', 14], month: ['month', 'mth', null] };
+const fnCycle = fn => (fn && CYCLES[fn.cycle]) ? fn.cycle : 'fortnight';
+const pWord = fn => CYCLES[fn ? fnCycle(fn) : budSet().cycle][0];
+const pAbbr = fn => CYCLES[fn ? fnCycle(fn) : budSet().cycle][1];
+function addMonths(s, n) { const x = D.parse(s), day = x.getDate(), y = new Date(x.getFullYear(), x.getMonth() + n, 1), last = new Date(y.getFullYear(), y.getMonth() + 1, 0).getDate(); y.setDate(Math.min(day, last)); return D.iso(y); }
+/** The day after `start` + one period of `cycle`. */
+const stepPeriod = (start, cycle) => cycle === 'month' ? addMonths(start, 1) : D.add(start, CYCLES[cycle] ? CYCLES[cycle][2] : 14);
+const fnLast = fn => D.add(fnEnd(fn), -1);
+const daysBetween = (a, b) => Math.round((D.parse(b) - D.parse(a)) / 864e5);
+const fnDays = fn => daysBetween(fn.start, fnEnd(fn));
+/** Paydays: "Payday" events in your calendar first, otherwise the payday in Budget settings repeated every period. */
+function paydayDates(from, to) {
+  const cal = allCalEvents().filter(e => /pay ?day/i.test(e.title)).map(e => e.date);
+  if (cal.length) return cal.filter(d => d >= from && d <= to).sort();
+  const s = budSet(); if (!s.payday) return [];
+  let d = s.payday, n = 0; const out = [];
+  if (d > to) { while (d > from && n++ < 600) d = s.cycle === 'month' ? addMonths(d, -1) : D.add(d, -CYCLES[s.cycle][2]); }
+  while (d <= to && n++ < 1200) { if (d >= from) out.push(d); d = stepPeriod(d, s.cycle); }
+  return out;
+}
+const nextPayday = () => paydayDates(D.today(), D.add(D.today(), 400))[0] || null;
+
+/* Income: what each line starts at in a new period. */
+const INC_MODES = [['keep', 'Keep last amount'], ['fixed', 'Start at a set amount'], ['zero', 'Start at $0'], ['gigs', 'Fill from gigs paid']];
+function incMode(name) {
+  const m = budSet().income[String(name).toLowerCase().trim()];
+  if (m && m.mode) return m;
+  return { mode: /salary|wage|pay/i.test(name) ? 'keep' : 'zero' };
+}
+const gigsSumIn = fn => r2(gigsPaidIn(fn).reduce((a, g) => a + (gigFee(g) || 0), 0));
+const incAmt = (fn, x) => x.auto === 'gigs' ? gigsSumIn(fn) : (+x.amount || 0);
+
+/* Categories: rename, recolour, reorder, hide, merge, spending limit. */
+const budAlias = k => { const a = budSet().alias; let n = 0; while (a[k] && n++ < 10) k = a[k]; return k; };
+function budCatsAll() {
+  const s = budSet(), own = (S().budget.customTypes || []).map(t => [t.k, t.label, t.color, null]);
+  const base = BUD_TYPES_BASE.slice(0, -1).concat(own, [BUD_TYPES_BASE[BUD_TYPES_BASE.length - 1]]);
+  return base.filter(t => !s.alias[t[0]]).map((t, i) => { const o = s.cats[t[0]] || {}; return { k: t[0], label: o.label || t[1], color: o.color || t[2], re: t[3], hidden: !!o.hidden, limit: +o.limit || 0, order: o.order != null ? o.order : i + (t[0] === 'other' ? 1000 : 0) }; })
+    .sort((a, b) => a.order - b.order);
+}
+const budCatInfo = k => budCatsAll().find(c => c.k === budAlias(k));
+
+/* Repeating bills: set aside a share every period. */
+const BILL_EVERY = [['week', 'Weekly', 7], ['fortnight', 'Fortnightly', 14], ['month', 'Monthly', 365.25 / 12], ['quarter', 'Quarterly', 365.25 / 4], ['year', 'Yearly', 365.25]];
+const billDays = b => (BILL_EVERY.find(x => x[0] === b.every) || BILL_EVERY[2])[2];
+const billStep = (d, every) => every === 'month' ? addMonths(d, 1) : every === 'quarter' ? addMonths(d, 3) : every === 'year' ? addMonths(d, 12) : D.add(d, every === 'week' ? 7 : 14);
+function billDues(b, from, to) {
+  if (!b.first) return []; let d = b.first, n = 0; const out = [];
+  while (d < from && n++ < 2000) d = billStep(d, b.every);
+  while (d <= to && n++ < 2000) { out.push(d); d = billStep(d, b.every); }
+  return out;
+}
+/** Amount to put aside each period: monthly bills in a monthly budget are exact, otherwise spread by days. */
+function billPer(b, fn) {
+  const amt = +b.amount || 0; if (!amt) return 0;
+  const cyc = fn ? fnCycle(fn) : budSet().cycle;
+  if (b.every === cyc) return r2(amt);
+  if (cyc === 'month' && ['quarter', 'year'].includes(b.every)) return r2(Math.ceil(amt / (b.every === 'quarter' ? 3 : 12) * 100) / 100);
+  return r2(Math.ceil(amt * (fn ? fnDays(fn) : (CYCLES[cyc][2] || 365.25 / 12)) / billDays(b) * 100) / 100);
+}
+function applyBills(fn) {
+  budSet().bills.forEach(b => {
+    if (!b.name) return;
+    let it = fn.items.find(i => i.billId === b.id) || fn.items.find(i => !i.billId && i.name.toLowerCase() === b.name.toLowerCase());
+    if (!it) { it = { id: uid('bb'), sec: 'fixed', name: b.name, budget: 0, saved: 0, transferred: null, actual: null }; let last = -1; fn.items.forEach((x, j) => { if (x.sec === 'fixed') last = j; }); fn.items.splice(last + 1, 0, it); }
+    it.billId = b.id; it.name = b.name; it.budget = billPer(b, fn); if (b.type) it.type = b.type;
+  });
+}
+const billFor = i => i.billId && budSet().bills.find(b => b.id === i.billId);
+
+/* Warnings: overspent items, categories near their limit, over-allocated budget. */
+function budWarnings(fn) {
+  if (!fn) return [];
+  const s = budSet(), out = [], w = pWord(fn);
+  fn.items.forEach(i => { if (isGoal(i)) return; const left = budLeft(i); if (i.actual != null && left < -0.004) out.push({ sev: 'high', text: `${i.name} is ${money2(-left)} over budget this ${w}.` }); });
+  if (s.warnAt > 0) {
+    const spent = {}; fn.items.forEach(i => { const k = budTypeOf(i); spent[k] = (spent[k] || 0) + (+i.actual || 0); });
+    budCatsAll().filter(c => c.limit > 0).forEach(c => { const v = r2(spent[c.k] || 0), pct = Math.round(v / c.limit * 100); if (pct >= s.warnAt) out.push({ sev: pct >= 100 ? 'high' : 'med', text: `${c.label}: ${money2(v)} of your ${money2(c.limit).replace('.00', '')} limit spent (${pct}%).` }); });
+  }
+  const t = budTotals(fn); if (t.remaining < -0.004) out.push({ sev: 'med', text: `This ${w}'s budget is over-allocated by ${money2(-t.remaining)}.` });
+  return out;
+}
+
+/* ---------- Saving goals: due dates, auto-fill, priority, pause, history, done list ---------- */
+const goalKey = i => goalName(i).toLowerCase();
+const sameGoalLater = (fn, i) => budFns().filter(g => g.start >= fn.start).flatMap(g => g.items.filter(x => isGoal(x) && goalKey(x) === goalKey(i)).map(x => ({ g, x })));
+/** Periods you can still pay into before the due date (skipping paused ones), from `start`. */
+function goalPeriodsLeft(i, start, cycle) {
+  if (!i.due) return null; let s = start, n = 0, k = 0;
+  while (s <= i.due && k++ < 600) { if (!(i.pausedUntil && s < i.pausedUntil)) n++; s = stepPeriod(s, cycle); }
+  return n;
+}
+/** What to put in each period to reach the target by the due date, counting from what was saved at the start of `fn`. */
+function goalNeed(i, fn) {
+  const target = +i.target || 0; if (!target || !i.due) return null;
+  const rem = Math.max(0, target - (+i.saved || 0)); if (!rem) return 0;
+  const n = goalPeriodsLeft(i, fn.start, fnCycle(fn));
+  return n ? Math.ceil(rem / n) : rem;
+}
+const goalPaused = (i, fn) => !!(i.pausedUntil && fn.start < i.pausedUntil);
+function sortGoals(list) { return list.map((x, n) => ({ x, n })).sort((a, b) => ((a.x.priority ?? 999) - (b.x.priority ?? 999)) || a.n - b.n).map(o => o.x); }
+function goalHistory(i, fn) {
+  return budFns().filter(f => f.start <= fn.start).map(f => { const x = f.items.find(y => isGoal(y) && goalKey(y) === goalKey(i)); return x ? { d: f.start, v: goalSaved(x) } : null; }).filter(Boolean);
+}
+function goalChart(i, fn) {
+  const pts = goalHistory(i, fn), target = +i.target || 0; if (pts.length < 2 && !i.due) return '';
+  const W = 300, H = 64, P = 4, d0 = pts[0].d, d1 = [pts[pts.length - 1].d, i.due || ''].sort().pop();
+  const span = Math.max(1, daysBetween(d0, d1)), max = Math.max(target, ...pts.map(p => p.v), 1);
+  const X = d => P + daysBetween(d0, d) / span * (W - 2 * P), Y = v => H - P - v / max * (H - 2 * P);
+  const line = pts.map((p, k) => `${k ? 'L' : 'M'}${X(p.d).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  return `<svg class="goal-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(goalName(i))} saved over time">
+    ${target ? `<line x1="${P}" x2="${W - P}" y1="${Y(target)}" y2="${Y(target)}" class="gc-target"><title>Target ${money2(target)}</title></line>` : ''}
+    ${i.due ? `<line x1="${X(i.due)}" x2="${X(i.due)}" y1="${P}" y2="${H - P}" class="gc-due"><title>Due ${D.label(i.due)}</title></line>` : ''}
+    ${pts.length > 1 ? `<path d="${line}" class="gc-line"/>` : ''}${pts.map(p => `<path d="M${X(p.d).toFixed(1)},${Y(p.v).toFixed(1)} l0,0" class="gc-dot"><title>${D.label(p.d)}: ${money2(p.v)}</title></path>`).join('')}</svg>`;
+}
+
 /* ---------- Saving goals: budget items with a target ---------- */
 const isGoal = i => !!(i.goal || (i.goal !== false && /^(sg\d+\b|saving goal|savings? goal|goal\b)/i.test(i.name || '')));
 const goalName = i => (i.name || '').replace(/^(sg\d+\s*[-–:]\s*|saving goal\s*[-–:]\s*|savings? goal\s*[-–:]\s*|goal\s*[-–:]\s*)/i, '').trim() || i.name;
 /** Money set aside so far (Current saved + this fortnight's transfer − anything already spent from it). */
 const goalSaved = i => Math.max(0, budLeft(i));
 function goalInfo(i, fn) {
-  const saved = goalSaved(i), target = +i.target || 0, per = +i.budget || budTr(i) || 0;
+  const saved = goalSaved(i), target = +i.target || 0, per = budTr(i) || +i.budget || 0, w = pWord(fn);
   const pct = target ? Math.min(100, Math.round(saved / target * 100)) : null;
-  let eta = '';
-  if (target && saved >= target) eta = 'Reached!';
-  else if (target && per > 0) { const n = Math.ceil((target - saved) / per); eta = `About ${plural(n, 'more fortnight')}, by ${D.parse(D.add(fn.start, 14 * (n + 1))).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`; }
-  else if (target) eta = 'Add a Budget per FN to see when you’ll get there';
-  return { saved, target, pct, eta };
+  let eta = '', status = '', need = null;
+  if (target && saved >= target) { eta = 'Reached!'; status = 'done'; }
+  else if (goalPaused(i, fn)) { eta = `Paused until ${D.label(i.pausedUntil)}`; status = 'paused'; }
+  else if (target && i.due) {
+    need = goalNeed(i, fn);
+    const by = D.parse(i.due).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: D.parse(i.due).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined });
+    if (i.due < fn.start) { eta = `Was due ${by}`; status = 'behind'; }
+    else { eta = `${money2(need).replace('.00', '')} per ${w} to reach ${money2(target).replace('.00', '')} by ${by}`; status = per + 0.005 >= need ? (per > need * 1.2 + 1 ? 'ahead' : 'on') : 'behind'; }
+  }
+  else if (target && per > 0) { let n = Math.ceil((target - saved) / per), d = fn.start; for (let k = 0; k <= n; k++) d = stepPeriod(d, fnCycle(fn)); eta = `About ${plural(n, 'more ' + w)}, by ${D.parse(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`; }
+  else if (target) eta = `Add an amount per ${w}, or a due date, to see when you’ll get there`;
+  return { saved, target, pct, eta, status, need };
 }
-function goalRow(i, fn, compact) {
-  const g = goalInfo(i, fn);
+const GOAL_STATUS = { on: ['On track', 'ok'], ahead: ['Ahead', 'ok'], behind: ['Behind', 'bad'], paused: ['Paused', 'muted'], done: ['Reached', 'ok'] };
+function goalRow(i, fn, compact, k, n) {
+  const g = goalInfo(i, fn), st = GOAL_STATUS[g.status];
   if (i.achieved) return `<div class="goal done is-done"><div class="goal-top"><button class="check" data-action="goal-done" data-fn="${fn.id}" data-id="${i.id}" aria-pressed="true" aria-label="Mark ${esc(goalName(i))} as not achieved"></button><b>${esc(goalName(i))}</b><span>${money2(Math.max(g.saved, +i.target || 0)).replace('.00', '')}</span></div><small>Achieved ${D.label(i.achieved)} 🎉</small></div>`;
-  return `<div class="goal ${compact ? 'compact' : ''}"><div class="goal-top">${compact ? '' : `<button class="check" data-action="goal-done" data-fn="${fn.id}" data-id="${i.id}" aria-pressed="false" aria-label="Tick off ${esc(goalName(i))}" title="Tick off: goal achieved"></button>`}<b>${esc(goalName(i))}</b><span>${money2(g.saved).replace('.00', '')}${g.target ? ` of ${money2(g.target).replace('.00', '')}` : ''}</span></div>
-    ${g.target ? `<span class="goal-bar"><i style="width:${g.pct}%"></i></span><small>${g.pct}%${g.eta ? ` · ${esc(g.eta)}` : ''}</small>` : `<small>No target yet. <button class="linkbtn" data-action="goal-target" data-fn="${fn.id}" data-id="${i.id}">Set a target</button></small>`}</div>`;
+  return `<div class="goal ${compact ? 'compact' : ''} ${g.status === 'paused' ? 'is-paused' : ''}"><div class="goal-top">${compact ? '' : `<button class="check" data-action="goal-done" data-fn="${fn.id}" data-id="${i.id}" aria-pressed="false" aria-label="Tick off ${esc(goalName(i))}" title="Tick off: goal achieved"></button>`}<b>${esc(goalName(i))}</b>${st && g.status !== 'done' ? `<span class="goal-st ${st[1]}">${st[0]}</span>` : ''}<span class="goal-amt">${money2(g.saved).replace('.00', '')}${g.target ? ` of ${money2(g.target).replace('.00', '')}` : ''}</span>
+      ${compact ? '' : `<span class="goal-tools">${n > 1 ? `<button class="linkbtn" data-action="goal-move" data-id="${i.id}" data-d="-1" ${k === 0 ? 'disabled' : ''} aria-label="Move ${esc(goalName(i))} up" title="Higher priority">↑</button><button class="linkbtn" data-action="goal-move" data-id="${i.id}" data-d="1" ${k === n - 1 ? 'disabled' : ''} aria-label="Move ${esc(goalName(i))} down" title="Lower priority">↓</button>` : ''}<button class="linkbtn" data-action="goal-settings" data-fn="${fn.id}" data-id="${i.id}" aria-label="Settings for ${esc(goalName(i))}" title="Due date, auto-fill, pause">⚙</button></span>`}</div>
+    ${g.target ? `<span class="goal-bar"><i style="width:${g.pct}%"></i></span><small>${g.pct}%${g.eta ? ` · ${esc(g.eta)}` : ''}${g.status === 'behind' && g.need != null ? ` · this ${pWord(fn)} has ${money2(budTr(i)).replace('.00', '')}` : ''}</small>` : `<small>No target yet. <button class="linkbtn" data-action="goal-settings" data-fn="${fn.id}" data-id="${i.id}">Set a target</button></small>`}
+    ${compact ? '' : goalChart(i, fn)}</div>`;
 }
 function goalsTile(fn) {
-  const goals = fn.items.filter(i => isGoal(i) && !i.achieved), done = fn.items.filter(i => isGoal(i) && i.achieved);
+  const goals = sortGoals(fn.items.filter(i => isGoal(i) && !i.achieved));
+  const store = S().budget.doneGoals || [], names = new Set(store.map(d => d.name.toLowerCase()));
+  const legacy = fn.items.filter(i => isGoal(i) && i.achieved && !names.has(goalKey(i))).map(i => ({ name: goalName(i), target: +i.target || 0, saved: goalSaved(i), achieved: i.achieved }));
+  const done = store.concat(legacy).sort((a, b) => (b.achieved || '').localeCompare(a.achieved || ''));
+  const w = pWord(fn);
   return `<section class="panel"><h2>Saving goals</h2>
-    ${goals.length ? goals.map(i => goalRow(i, fn)).join('') : `<p class="empty">${done.length ? 'Every goal ticked off. Nice work.' : 'No saving goals yet.'}</p>`}
-    ${done.length ? `<h3 class="ms-h">Achieved</h3>${done.map(i => goalRow(i, fn)).join('')}` : ''}
-    <form class="inline-form" data-form="goal-add" style="margin-top:12px"><input class="input" name="name" placeholder="New goal, e.g. Pedalboard upgrade" aria-label="Goal name"><input class="input bnum" name="target" inputmode="decimal" placeholder="Target $" aria-label="Target amount"><input class="input bnum" name="per" inputmode="decimal" placeholder="Per FN $" aria-label="Amount to put aside each fortnight"><button class="btn small" type="submit">Add a goal</button></form>
+    ${goals.length ? `${goals.length > 1 ? `<p class="muted" style="margin:-4px 0 8px;font-size:13px">Top of the list gets leftover money first${budSet().leftover === 'goal' ? '' : ' (if leftovers go to goals in Budget settings)'}.</p>` : ''}${goals.map((i, k) => goalRow(i, fn, false, k, goals.length)).join('')}` : `<p class="empty">${done.length ? 'Every goal ticked off. Nice work.' : 'No saving goals yet.'}</p>`}
+    <form class="inline-form" data-form="goal-add" style="margin-top:12px"><input class="input" name="name" placeholder="New goal, e.g. Pedalboard upgrade" aria-label="Goal name"><input class="input bnum" name="target" inputmode="decimal" placeholder="Target $" aria-label="Target amount"><input class="input" type="date" name="due" aria-label="Due date (optional)" title="Due date (optional): works out how much to put aside each ${w}"><input class="input bnum" name="per" inputmode="decimal" placeholder="Per ${pAbbr(fn)} $" aria-label="Amount to put aside each ${w}" title="Leave blank with a due date and it's worked out for you"><button class="btn small" type="submit">Add a goal</button></form>
+    ${done.length ? `<h3 class="ms-h">Done</h3><ul class="rows goal-done-list">${done.map(d => `<li class="row"><span aria-hidden="true">🎉</span><div class="row-main"><span>${esc(d.name)}</span><div class="row-meta"><span>${money2(Math.max(+d.saved || 0, +d.target || 0)).replace('.00', '')}</span><span>Achieved ${d.achieved ? D.parse(d.achieved).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span></div></div></li>`).join('')}</ul>` : ''}
   </section>`;
+}
+function openGoalSettings(fnId, id) {
+  const fn = S().budget.fns.find(f => f.id === fnId) || budActive(), i = fn && fn.items.find(x => x.id === id); if (!i) return;
+  const w = pWord(fn), paused = goalPaused(i, fn), need = goalNeed(i, fn);
+  $('#overlay').innerHTML = `<div class="scrim" data-action="scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="gs-title" style="max-width:560px">
+    <div class="modal-head"><h2 id="gs-title">${esc(goalName(i))}</h2><button class="btn small ghost" data-action="close">Close</button></div>
+    <form class="form-grid" data-form="goal-set" data-fn="${fn.id}" data-id="${i.id}">
+      <label class="field full">Name<input class="input" name="name" value="${esc(goalName(i))}" required></label>
+      <label class="field">Target ($)<input class="input" name="target" inputmode="decimal" value="${i.target ?? ''}" placeholder="e.g. 2000"></label>
+      <label class="field">Due date<input class="input" type="date" name="due" value="${i.due || ''}"></label>
+      <label class="field full" style="flex-direction:row;align-items:center;gap:10px"><input type="checkbox" name="autoFill" ${i.autoFill !== false ? 'checked' : ''}> Fill in the amount each ${w} so it's reached by the due date</label>
+      <p class="muted full" style="margin:-4px 0 0;font-size:13px">${need != null ? `Right now that's <b>${money2(need)}</b> per ${w}.` : `Add a target and a due date and the amount per ${w} is worked out for you, and adjusts if you put in more or less.`} Without auto-fill, the amount is whatever you type in Budget per ${pAbbr(fn)}.</p>
+      <div class="modal-foot full"><button class="btn primary" type="submit">Save goal</button></div>
+    </form>
+    <h3 class="ms-h">Pause</h3>
+    ${paused ? `<p style="margin:0 0 8px">Paused until ${D.label(i.pausedUntil)}. Nothing goes in until then${i.due ? ', and the amount per ' + w + ' catches up afterwards' : ''}.</p><button class="btn small" data-action="goal-pause" data-fn="${fn.id}" data-id="${i.id}" data-n="0">Resume now</button>`
+      : `<p class="muted" style="margin:0 0 8px;font-size:14px">Skip this goal while money's tight. ${i.due ? 'The due-date maths catches up afterwards.' : ''}</p><div class="inline-form"><button class="btn small" data-action="goal-pause" data-fn="${fn.id}" data-id="${i.id}" data-n="1">Pause this ${w}</button><button class="btn small" data-action="goal-pause" data-fn="${fn.id}" data-id="${i.id}" data-n="2">Pause 2 ${w}s</button></div>`}
+  </div></div>`;
+}
+
+/* ---------- Budget settings window ---------- */
+let bsScroll = 0;
+function openBudSettings() {
+  const s = budSet(), fn = budActive(), sc = $('#overlay .scrim'); if (sc) bsScroll = sc.scrollTop;
+  const w = CYCLES[s.cycle][0];
+  const incNames = fn ? [...new Set(fn.income.filter(x => !/^carried over/i.test(x.name)).map(x => x.name))] : [];
+  const cats = budCatsAll();
+  const sel = (attrs, opts, v) => `<select class="input" ${attrs}>${opts.map(([k, l]) => `<option value="${k}" ${String(v) === String(k) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  $('#overlay').innerHTML = `<div class="scrim" data-action="scrim"><div class="modal bs-modal" role="dialog" aria-modal="true" aria-labelledby="bs-title" style="max-width:760px">
+    <div class="modal-head"><h2 id="bs-title">Budget settings</h2><button class="btn small ghost" data-action="close">Done</button></div>
+    <p class="muted" style="margin-top:0;font-size:14px">Changes save as you go and sync to your other device.</p>
+
+    <h3 class="bs-h">Pay cycle</h3>
+    <div class="form-grid">
+      <label class="field">Budget each${sel('data-change="bs" data-k="cycle"', [['week', 'Week'], ['fortnight', 'Fortnight'], ['month', 'Month']], s.cycle)}</label>
+      <label class="field">Payday<input class="input" type="date" data-change="bs" data-k="payday" value="${s.payday || ''}"></label>
+    </div>
+    <p class="muted bs-note">A new cycle starts with your next ${w}; ones you've already started stay as they are. ${allCalEvents().some(e => /pay ?day/i.test(e.title)) ? '"Payday" events in your calendar are used first.' : `Payday repeats every ${w} from the date you pick.`}</p>
+
+    <h3 class="bs-h">Income each new ${w}</h3>
+    ${incNames.length ? `<div class="bs-rows">${incNames.map(n => { const m = incMode(n); return `<div class="bs-row"><b>${esc(n)}</b>${sel(`data-change="bs-inc" data-name="${esc(n)}" data-f="mode" aria-label="${esc(n)} each new ${w}"`, INC_MODES, m.mode)}${m.mode === 'fixed' ? `<input class="input bnum" inputmode="decimal" data-change="bs-inc" data-name="${esc(n)}" data-f="amount" value="${m.amount ?? ''}" placeholder="$" aria-label="${esc(n)} amount">` : ''}</div>`; }).join('')}</div>
+      <p class="muted bs-note">"Fill from gigs paid" adds up gigs marked paid in that ${w}, and updates by itself as they're paid (this ${w} too).</p>` : `<p class="muted">Start a ${w} first.</p>`}
+
+    <h3 class="bs-h">Leftover money</h3>
+    <div class="bs-radio">${[['carry', `Carry it into next ${w}'s income`], ['goal', 'Put it towards saving goals, top of the list first'], ['none', `Let it go (start each ${w} fresh)`]].map(([k, l]) => `<label><input type="radio" name="bs-left" data-change="bs" data-k="leftover" value="${k}" ${s.leftover === k ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+    <p class="muted bs-note">This is unallocated money (Remaining). Unspent money in each item always stays in that item's Current saved.</p>
+
+    <h3 class="bs-h">Repeating bills</h3>
+    ${s.bills.length ? `<div class="scroll-x"><table class="tbl bs-bills"><thead><tr><th>Bill</th><th class="num">Amount</th><th>How often</th><th>Next due</th><th class="num">Per ${w}</th><th></th></tr></thead><tbody>
+      ${s.bills.map(b => `<tr><td><input class="input" data-change="bs-bill" data-id="${b.id}" data-f="name" value="${esc(b.name)}" aria-label="Bill name"></td><td class="num"><input class="input bnum" inputmode="decimal" data-change="bs-bill" data-id="${b.id}" data-f="amount" value="${b.amount ?? ''}" aria-label="Amount"></td><td>${sel(`data-change="bs-bill" data-id="${b.id}" data-f="every" aria-label="How often"`, BILL_EVERY.map(x => [x[0], x[1]]), b.every)}</td><td><input class="input" type="date" data-change="bs-bill" data-id="${b.id}" data-f="first" value="${(billDues(b, D.today(), D.add(D.today(), 800))[0]) || b.first || ''}" aria-label="Next due"></td><td class="num"><b>${money2(billPer(b, null))}</b></td><td><button class="linkbtn danger-link" data-action="bs-bill-del" data-id="${b.id}" aria-label="Remove ${esc(b.name)}">×</button></td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+    <form class="inline-form" data-form="bs-bill-add" style="margin-top:8px"><input class="input" name="name" placeholder="e.g. Car rego" aria-label="Bill name" required><input class="input bnum" name="amount" inputmode="decimal" placeholder="Amount" aria-label="Amount" required>${sel('name="every" aria-label="How often"', BILL_EVERY.map(x => [x[0], x[1]]), 'year')}<input class="input" type="date" name="first" aria-label="Next due" required><button class="btn small" type="submit">Add bill</button></form>
+    <p class="muted bs-note">Each bill gets its own line in Core expenses (Fixed) with a share set aside every ${w}, so a yearly bill is a small amount each pay. It shows in Bills due when its date comes up.</p>
+
+    <h3 class="bs-h">Categories</h3>
+    <div class="bs-cats">${cats.map((c, k) => `<div class="bs-cat ${c.hidden ? 'is-hidden' : ''}">
+      <input type="color" class="bs-col" data-change="bs-cat" data-k="${c.k}" data-f="color" value="${c.color}" aria-label="Colour for ${esc(c.label)}">
+      <input class="input" data-change="bs-cat" data-k="${c.k}" data-f="label" value="${esc(c.label)}" aria-label="Category name">
+      <input class="input bnum" inputmode="decimal" data-change="bs-cat" data-k="${c.k}" data-f="limit" value="${c.limit || ''}" placeholder="Limit" title="Spending limit per ${w}, for warnings" aria-label="Spending limit per ${w} for ${esc(c.label)}">
+      <label class="bs-hide" title="Hide from the category list"><input type="checkbox" data-change="bs-cat" data-k="${c.k}" data-f="hidden" ${c.hidden ? 'checked' : ''}> Hide</label>
+      ${sel(`data-change="bs-merge" data-k="${c.k}" aria-label="Merge ${esc(c.label)} into another category"`, [['', 'Merge into…']].concat(cats.filter(x => x.k !== c.k).map(x => [x.k, x.label])), '')}
+      <span class="bs-move"><button class="linkbtn" data-action="bs-cat-move" data-k="${c.k}" data-d="-1" ${k === 0 ? 'disabled' : ''} aria-label="Move up">↑</button><button class="linkbtn" data-action="bs-cat-move" data-k="${c.k}" data-d="1" ${k === cats.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button></span>
+    </div>`).join('')}</div>
+    <form class="inline-form" data-form="bs-cat-add" style="margin-top:8px"><input class="input" name="name" placeholder="New category, e.g. Coffee" aria-label="New category" required><button class="btn small" type="submit">Add category</button></form>
+    <p class="muted bs-note">Limits are per ${w} and feed the warnings below. Merging moves every item (in every ${w}) into the other category.</p>
+
+    <h3 class="bs-h">Overspending warnings</h3>
+    <div class="form-grid"><label class="field">Warn when a category reaches${sel('data-change="bs" data-k="warnAt"', [[0, 'Off'], [75, '75% of its limit'], [80, '80% of its limit'], [90, '90% of its limit'], [100, '100% of its limit']], s.warnAt)}</label></div>
+    <p class="muted bs-note">Warnings show on the Snapshot and at the top of Budget. Items spent past their budget are always flagged.</p>
+  </div></div>`;
+  const sc2 = $('#overlay .scrim'); if (sc2) sc2.scrollTop = bsScroll;
+}
+/** After a settings change: refresh repeating bills and gig income in this period and later ones. */
+function budReapply() {
+  const fn = budActive(); if (!fn) return;
+  budFns().filter(f => f.start >= fn.start).forEach(f => {
+    applyBills(f);
+    f.income.forEach(x => { const m = incMode(x.name); if (m.mode === 'gigs') x.auto = 'gigs'; else if (x.auto === 'gigs') { x.amount = gigsSumIn(f); delete x.auto; } });
+  });
 }
 function openBudNote(id) {
   const fn = budActive(), i = fn && fn.items.find(x => x.id === id); if (!i) return;
@@ -4605,7 +4869,7 @@ function openBudNote(id) {
       <label class="field">Target ($)<input class="input" name="target" inputmode="decimal" value="${i.target ?? ''}" placeholder="e.g. 538"></label>
       <label class="field full">Section<select class="input" name="sec">${BUD_SECS.map(([k, l]) => `<option value="${k}" ${i.sec === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="field full">Note<textarea class="input" name="note" rows="3" placeholder="e.g. Due 10 August, or what this was for">${esc(i.note || '')}</textarea></label>
-      <label class="field full">Category (for the spending chart)<select class="input" name="type" data-change="bud-type-pick">${budTypes().map(([k, l]) => `<option value="${k}" ${budTypeOf(i) === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add a new category…</option></select></label>
+      <label class="field full">Category (for the spending chart)<select class="input" name="type" data-change="bud-type-pick">${budTypesPick(budTypeOf(i)).map(([k, l]) => `<option value="${k}" ${budTypeOf(i) === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}<option value="__new">Add a new category…</option></select></label>
       <div class="modal-foot full"><button class="btn primary" type="submit">Save</button></div>
     </form></div></div>`;
 }
@@ -4644,7 +4908,7 @@ function budgetSheetCells(fns) {
     let r = 0;
     put(r, c0, { v: fnLabel(fn).replace('–', '-') }); r += 2;
     ['Income', '', 'Budget Per FN', 'Current saved', 'Transferred', 'Actual used', '% of income', 'Notes'].forEach((t, k) => t && put(r, c0 + k, { v: t, bold: true })); r++;
-    const inc0 = r; fn.income.forEach(x => { put(r, c0, { v: x.name }); put(r, c0 + 1, { v: r2(x.amount), num: true }); r++; });
+    const inc0 = r; fn.income.forEach(x => { put(r, c0, { v: x.name }); put(r, c0 + 1, { v: r2(incAmt(fn, x)), num: true }); r++; });
     const incTot = r; put(r, c0, { v: 'TOTAL income', bold: true }); put(r, c0 + 1, { f: fn.income.length ? `SUM(${A(1)}${inc0 + 1}:${A(1)}${r})` : '0', num: true, bold: true }); r++;
     const IT = `$${A(1)}$${incTot + 1}`, trRanges = [];
     BUD_SECS.forEach(([k, label]) => {
@@ -4752,9 +5016,9 @@ function moneySnapshot() {
   const owed = S().gigs.filter(awaitingPayment).sort((a, b) => invoiceDue(a).localeCompare(invoiceDue(b)));
   const owedSum = owed.reduce((a, g) => a + (gigFee(g) || 0), 0);
   const toInvoice = S().gigs.filter(g => D.diff(g.date) < 0 && !g.invoiced && needsInvoice(g) && !g.reviewPending);
-  const pay = allCalEvents().filter(e => /pay ?day/i.test(e.title) && e.date >= T).map(e => e.date).sort()[0];
+  const pay = nextPayday();
   // spending breakdown (Actual used; Planned if nothing's been spent yet)
-  let pie = `<div class="ms-pie-empty">No budget yet. <button class="linkbtn" data-action="nav" data-view="budget">Start this fortnight</button></div>`;
+  let pie = `<div class="ms-pie-empty">No budget yet. <button class="linkbtn" data-action="nav" data-view="budget">Start budgeting</button></div>`;
   if (fn) {
     const spent = {}, planned = {};
     fn.items.forEach(i => { const k = budTypeOf(i); spent[k] = (spent[k] || 0) + (+i.actual || 0); planned[k] = (planned[k] || 0) + budTr(i); });
@@ -4767,18 +5031,18 @@ function moneySnapshot() {
       const top = rows.slice(0, 5), rest = rows.slice(5).reduce((a, x) => a + x.v, 0);
       pie = `<div class="ms-pie"><svg viewBox="0 0 120 120" role="img" aria-label="${useSpent ? 'Spending' : 'Planned spending'} by category">${arcs}<text x="60" y="56" text-anchor="middle" font-size="9" fill="var(--muted)">${useSpent ? 'Spent' : 'Planned'}</text><text x="60" y="70" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">${aud(Math.round(total))}</text></svg>
         <ul class="ms-legend">${top.map(x => `<li><i style="background:${x.c}"></i><span>${esc(x.l)}</span><b>${money2(x.v).replace('.00', '')}</b></li>`).join('')}${rest ? `<li class="muted"><i></i><span>Everything else</span><b>${money2(rest).replace('.00', '')}</b></li>` : ''}</ul></div>
-        <p class="ms-note">${useSpent ? 'Spent' : 'Planned'} this fortnight, ${fnLabel(fn)}</p>`;
-    } else pie = `<div class="ms-pie-empty">Nothing planned or spent this fortnight yet.</div>`;
+        <p class="ms-note">${useSpent ? 'Spent' : 'Planned'} this ${pWord(fn)}, ${fnLabel(fn)}</p>`;
+    } else pie = `<div class="ms-pie-empty">Nothing planned or spent this ${pWord(fn)} yet.</div>`;
   }
   return `<section class="panel"><h2>Money</h2>
     ${pie}
     <div class="ms-grid">
       <div class="ms-cell"><span>Owed to you</span><b>${aud(owedSum)}</b><small>${owed.length ? `${plural(owed.length, 'invoice')}, next due ${D.diff(invoiceDue(owed[0])) >= 0 ? (D.diff(invoiceDue(owed[0])) === 0 ? 'today' : 'in ' + plural(D.diff(invoiceDue(owed[0])), 'day')) : `<span class="pri">${plural(-D.diff(invoiceDue(owed[0])), 'day')} ago</span>`}` : 'Nothing waiting'}</small></div>
       <div class="ms-cell"><span>To invoice</span><b>${toInvoice.length}</b><small>${toInvoice.length ? esc(listJoin(toInvoice.slice(0, 2).map(g => venueBaseName(g.venue)))) + (toInvoice.length > 2 ? ` and ${toInvoice.length - 2} more` : '') : 'All sent'}</small></div>
-      <div class="ms-cell"><span>Next payday</span><b>${pay ? D.label(pay) : '—'}</b><small>${pay ? (D.diff(pay) === 0 ? 'Today' : `In ${plural(D.diff(pay), 'day')}`) : 'Add "Payday" to your calendar'}</small></div>
+      <div class="ms-cell"><span>Next payday</span><b>${pay ? D.label(pay) : '—'}</b><small>${pay ? (D.diff(pay) === 0 ? 'Today' : `In ${plural(D.diff(pay), 'day')}`) : '<button class="linkbtn" data-action="bs-open">Set your payday</button>'}</small></div>
     </div>
     ${billsSoonHtml()}
-    ${fn && fn.items.some(i => isGoal(i) && !i.achieved) ? `<h3 class="ms-h">Saving goals</h3>${fn.items.filter(i => isGoal(i) && !i.achieved).map(i => goalRow(i, fn, true)).join('')}` : ''}
+    ${fn && fn.items.some(i => isGoal(i) && !i.achieved) ? `<h3 class="ms-h">Saving goals</h3>${sortGoals(fn.items.filter(i => isGoal(i) && !i.achieved)).map(i => goalRow(i, fn, true)).join('')}` : ''}
     <div class="inline-form" style="margin-top:10px"><button class="btn small" data-action="nav" data-view="budget">Open Budget</button><button class="btn small ghost" data-action="nav" data-view="music">Gigs and invoices</button></div>
   </section>`;
 }
@@ -4786,6 +5050,9 @@ function moneySnapshot() {
 function billsSoonHtml() {
   const st = S(), T = D.today(), end = D.add(T, 7);
   const cal = allCalEvents().filter(e => evKind(e) === 'bill' && e.date >= T && e.date <= end).map(e => ({ kind: 'cal', id: e.id, title: e.title.replace(/\s*\$\s?[\d,]+(\.\d+)?/, '').trim() || e.title, amount: e.amount, date: e.date, paid: !!st.calPaid[e.id], color: evColor(e) }));
+  const repB = budSet().bills.flatMap(b => billDues(b, T, end).map(d => ({ kind: 'cal', id: `rb:${b.id}:${d}`, title: b.name, amount: b.amount, date: d, paid: !!st.calPaid[`rb:${b.id}:${d}`] })));
+  const repN = new Set(repB.map(x => x.title.toLowerCase()));
+  cal.splice(0, cal.length, ...cal.filter(x => !repN.has(x.title.toLowerCase())), ...repB);
   const tasks = st.tasks.filter(t => t.type === 'bill' && t.due && t.due >= T && t.due <= end).map(t => ({ kind: 'task', id: t.id, title: t.title, amount: (String(t.title).match(/\$\s?([\d,]+(?:\.\d+)?)/) || [])[1], date: t.due, paid: t.status === 'done' }));
   const list = cal.concat(tasks).sort((a, b) => a.date.localeCompare(b.date));
   const due = list.filter(x => !x.paid).reduce((a, x) => a + (+String(x.amount || 0).replace(/,/g, '') || 0), 0);
@@ -4794,51 +5061,54 @@ function billsSoonHtml() {
 }
 function viewBudget() {
   const fns = budFns(), fn = budActive();
-  const head = `<div class="vhead"><div><h1>Budget</h1><p>One fortnight at a time.</p></div></div>`;
+  const w = fn ? pWord(fn) : pWord(), wNew = pWord();
+  const head = `<div class="vhead"><div><h1>Budget</h1><p>One ${w} at a time.</p></div>${fn ? '' : '<button class="btn" data-action="bs-open">⚙ Budget settings</button>'}</div>`;
   if (!fn) {
     const pd = lastPayday() || D.today();
     return head + `<section class="panel"><h2>Start budgeting</h2>
-      <form class="inline-form" data-form="bud-first"><label class="field" style="flex-direction:row;align-items:center;gap:8px">Fortnight starts<input class="input" type="date" name="start" value="${pd}"></label><button class="btn primary" type="submit">Start this fortnight</button></form>
+      <form class="inline-form" data-form="bud-first"><label class="field" style="flex-direction:row;align-items:center;gap:8px">${cap(wNew)} starts<input class="input" type="date" name="start" value="${pd}"></label><button class="btn primary" type="submit">Start this ${wNew}</button></form>
       <div class="inline-form" style="margin-top:12px"><button class="btn" data-action="bud-import">Import from my Excel budget</button></div></section>`;
   }
   const t = budTotals(fn), i = fns.findIndex(x => x.id === fn.id), gigs = gigsPaidIn(fn), gigSum = r2(gigs.reduce((a, g) => a + (gigFee(g) || 0), 0));
-  const gigRow = fn.income.find(x => /gig/i.test(x.name)), bills = billsIn(fn);
+  const gigRow = fn.income.find(x => /gig/i.test(x.name)), bills = billsIn(fn), warns = budWarnings(fn);
   const remCls = t.remaining < -0.004 ? 'bad' : Math.abs(t.remaining) < 0.005 ? 'ok' : 'left';
   return head + `
   <div class="bud-nav">
-    <button class="btn small" data-action="bud-go" data-d="-1" ${i <= 0 ? 'disabled' : ''} aria-label="Previous fortnight">←</button>
-    <select class="input" data-change="bud-pick" aria-label="Choose a fortnight">${fns.map(f => `<option value="${f.id}" ${f.id === fn.id ? 'selected' : ''}>${fnLabel(f)}</option>`).join('')}</select>
-    <button class="btn small" data-action="bud-go" data-d="1" ${i >= fns.length - 1 ? 'disabled' : ''} aria-label="Next fortnight">→</button>
-    <button class="btn small primary" data-action="bud-new">Start next fortnight</button>
+    <button class="btn small" data-action="bud-go" data-d="-1" ${i <= 0 ? 'disabled' : ''} aria-label="Previous ${w}">←</button>
+    <select class="input" data-change="bud-pick" aria-label="Choose a ${w}">${fns.map(f => `<option value="${f.id}" ${f.id === fn.id ? 'selected' : ''}>${fnLabel(f)}</option>`).join('')}</select>
+    <button class="btn small" data-action="bud-go" data-d="1" ${i >= fns.length - 1 ? 'disabled' : ''} aria-label="Next ${w}">→</button>
+    <button class="btn small primary" data-action="bud-new">Start next ${wNew}</button>
     <button class="btn small ghost" data-action="bud-import">Import from Excel</button>
     <button class="btn small ghost" data-action="bud-export">Export to Excel</button>
-    <button class="btn small ghost danger-link" data-action="bud-remove" data-id="${fn.id}">Delete this fortnight</button>
+    <button class="btn small" data-action="bs-open">⚙ Budget settings</button>
+    <button class="btn small ghost danger-link" data-action="bud-remove" data-id="${fn.id}">Delete this ${w}</button>
   </div>
-  <section class="panel"><h2>This fortnight</h2>
+  <section class="panel"><h2>This ${w}</h2>
+    ${warns.length ? `<ul class="att bud-warn">${warns.map(x => `<li class="${x.sev}">${esc(x.text)}</li>`).join('')}</ul>` : ''}
     <div class="money bud-sum">
       <div><span>Total income</span><b>${money2(t.income)}</b></div>
       <div><span>Total transferred</span><b>${money2(t.allocated)}</b></div>
       <div class="rem ${remCls}"><span>Remaining</span><b>${money2(t.remaining)}</b><small>${remCls === 'ok' ? 'All allocated' : remCls === 'left' ? 'Left to allocate' : 'Over-allocated'}</small></div>
       <div><span>Actual used</span><b>${money2(t.spent)}</b><small>${t.income ? (t.spent / t.income * 100).toFixed(0) + '% of income' : ''}</small></div>
     </div>
-    ${gigSum && (!gigRow || Math.abs((+gigRow.amount || 0) - gigSum) > 0.004) ? `<div class="notice"><span>${plural(gigs.length, 'gig')} paid you ${money2(gigSum)} this fortnight.</span><button class="btn small" data-action="bud-gigs" data-v="${gigSum}">Use for Gigs income</button></div>` : ''}
-    ${bills.some(b => !b.paid) ? `<div class="bills-due"><div class="bills-due-head"><b>Bills due this fortnight</b>${bills.some(b => !b.paid && b.amount) ? `<span class="muted">${money2(bills.filter(b => !b.paid).reduce((a, b) => a + (+b.amount || 0), 0))} still to pay</span>` : ''}${bills.some(b => !b.paid && !b.inBudget) ? '<button class="btn small" data-action="bud-bills">Add unpaid to Seasonal</button>' : ''}</div>
+    ${gigSum && !fn.income.some(x => x.auto === 'gigs') && (!gigRow || Math.abs((+gigRow.amount || 0) - gigSum) > 0.004) ? `<div class="notice"><span>${plural(gigs.length, 'gig')} paid you ${money2(gigSum)} this ${w}.</span><button class="btn small" data-action="bud-gigs" data-v="${gigSum}">Use for Gigs income</button><button class="btn small ghost" data-action="bud-gigs-auto">Always fill it in</button></div>` : ''}
+    ${bills.some(b => !b.paid) ? `<div class="bills-due"><div class="bills-due-head"><b>Bills due this ${w}</b>${bills.some(b => !b.paid && b.amount) ? `<span class="muted">${money2(bills.filter(b => !b.paid).reduce((a, b) => a + (+b.amount || 0), 0))} still to pay</span>` : ''}${bills.some(b => !b.paid && !b.inBudget) ? '<button class="btn small" data-action="bud-bills">Add unpaid to Seasonal</button>' : ''}</div>
       <ul class="rows">${bills.map(b => `<li class="row ${b.paid ? 'is-done' : ''}"><button class="check" data-action="calbill-paid" data-id="${esc(b.id)}" aria-pressed="${b.paid}" aria-label="${b.paid ? 'Mark unpaid' : 'Mark paid'}: ${esc(b.name)}"></button><div class="row-main"><span>${b.color ? `<i class="cdot" style="background:${b.color}"></i>` : ''}${esc(b.name)}</span>${b.inBudget ? '<div class="row-meta"><span>In your budget</span></div>' : ''}</div><span class="chip ${!b.paid && D.diff(b.date) <= 1 ? 'warn' : ''}">${D.label(b.date)}</span><b class="ms-amt">${b.amount ? money2(b.amount) : ''}</b></li>`).join('')}</ul></div>` : ''}
   </section>
   <section class="panel"><h2>Income</h2>
     <div class="scroll-x"><table class="tbl btbl"><thead><tr><th>Source</th><th class="num">Amount</th><th></th></tr></thead><tbody>
-    ${fn.income.map(x => `<tr data-binc="${x.id}"><td><div class="bname-wrap"><button class="drag-h" data-bdrag="${x.id}" data-bkind="inc" tabindex="-1" aria-hidden="true" title="Drag to move">⠿</button><input class="input bname" data-change="bud-field" data-fid="n:${x.id}:name" value="${esc(x.name)}" aria-label="Income source"></div></td><td class="num">${bNum(x.amount, `n:${x.id}:amount`, '0')}</td><td><button class="linkbtn danger-link" tabindex="-1" data-action="bud-del-inc" data-id="${x.id}" aria-label="Remove ${esc(x.name)}">×</button></td></tr>`).join('')}
+    ${fn.income.map(x => `<tr data-binc="${x.id}"><td><div class="bname-wrap"><button class="drag-h" data-bdrag="${x.id}" data-bkind="inc" tabindex="-1" aria-hidden="true" title="Drag to move">⠿</button><input class="input bname" data-change="bud-field" data-fid="n:${x.id}:name" value="${esc(x.name)}" aria-label="Income source"></div></td><td class="num">${x.auto === 'gigs' ? `<span class="bnum-auto" title="Gigs marked paid this ${w}. Change this in Budget settings.">${money2(incAmt(fn, x))}<small>from ${plural(gigs.length, 'paid gig')}</small></span>` : bNum(x.amount, `n:${x.id}:amount`, '0')}</td><td><button class="linkbtn danger-link" tabindex="-1" data-action="bud-del-inc" data-id="${x.id}" aria-label="Remove ${esc(x.name)}">×</button></td></tr>`).join('')}
     <tr class="tot"><td>Total income</td><td class="num">${money2(t.income)}</td><td></td></tr></tbody></table></div>
     <form class="inline-form" data-form="bud-add-inc" style="margin-top:10px"><input class="input" name="name" placeholder="Add income, e.g. Tax refund" aria-label="New income source"><input class="input bnum" name="amount" inputmode="decimal" placeholder="Amount" aria-label="Amount"><button class="btn small" type="submit">Add</button></form>
   </section>
   ${BUD_SECS.map(([k, l]) => budSectionTile(fn, k, l, t)).join('')}
   ${goalsTile(fn)}
   ${budSpendTile(fn)}
-  <section class="panel"><h2>All fortnights</h2>
-    <div class="scroll-x"><table class="tbl"><thead><tr><th>Fortnight</th><th class="num">Income</th><th class="num">Transferred</th><th class="num">Actual used</th><th class="num">Remaining</th></tr></thead><tbody>
+  <section class="panel"><h2>All ${w}s</h2>
+    <div class="scroll-x"><table class="tbl"><thead><tr><th>${cap(w)}</th><th class="num">Income</th><th class="num">Transferred</th><th class="num">Actual used</th><th class="num">Remaining</th></tr></thead><tbody>
     ${[...new Set(fns.map(f => fyOfDate(f.start)))].sort((a, b) => b - a).map(y => { const list = fns.filter(f => fyOfDate(f.start) === y).reverse(), sum = k => list.reduce((a, f) => a + budTotals(f)[k], 0);
       const openFY = (S().settings.open_budfy || [fyOfDate(D.today())]).includes(y);
-      return `<tr class="fy-row"><td><button class="month-head fy-head" data-action="bud-fy" data-y="${y}" aria-expanded="${openFY}"><span class="chev-s ${openFY ? 'open' : ''}" aria-hidden="true"></span><b>${fyRange(y).label} financial year</b> <span class="muted">${plural(list.length, 'fortnight')}</span></button></td><td class="num"><b>${money2(sum('income'))}</b></td><td class="num"><b>${money2(sum('allocated'))}</b></td><td class="num"><b>${money2(sum('spent'))}</b></td><td class="num"><b>${money2(sum('remaining'))}</b></td></tr>`
+      return `<tr class="fy-row"><td><button class="month-head fy-head" data-action="bud-fy" data-y="${y}" aria-expanded="${openFY}"><span class="chev-s ${openFY ? 'open' : ''}" aria-hidden="true"></span><b>${fyRange(y).label} financial year</b> <span class="muted">${plural(list.length, w)}</span></button></td><td class="num"><b>${money2(sum('income'))}</b></td><td class="num"><b>${money2(sum('allocated'))}</b></td><td class="num"><b>${money2(sum('spent'))}</b></td><td class="num"><b>${money2(sum('remaining'))}</b></td></tr>`
         + (!openFY ? '' : list.map(f => { const x = budTotals(f); return `<tr class="${f.id === fn.id ? 'is-cur' : ''}"><td><button class="linkbtn" data-action="bud-open" data-id="${f.id}">${fnLabel(f)}</button></td><td class="num">${money2(x.income)}</td><td class="num">${money2(x.allocated)}</td><td class="num">${money2(x.spent)}</td><td class="num ${x.remaining < -0.004 ? 'pri' : 'ok-t'}">${money2(x.remaining)}</td></tr>`; }).join('')); }).join('')}
     </tbody></table></div>
   </section>`;
@@ -5171,6 +5441,23 @@ function openRecatModal(id, gigId) {
     <p class="muted" style="font-size:13px;margin:12px 0 0">The dashboard remembers this on every device. Your Google Calendar isn't changed.${ov ? ` <button class="linkbtn" data-action="recat-set" data-dest="" data-ids="${esc(ids.join(' '))}">Let the dashboard decide again</button>` : ''}</p>
   </div></div>`;
 }
+/** Add a gig by hand (one in Google Calendar is picked up and linked automatically). */
+function openNewGigModal() {
+  const venues = [...new Set(S().gigs.map(g => venueBaseName(g.venue)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  $('#overlay').innerHTML = `<div class="scrim" data-action="scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="ng-title">
+    <div class="modal-head"><h2 id="ng-title">Add gig</h2><button class="btn small ghost" data-action="close">Close</button></div>
+    <form class="form-grid" data-form="gig-new">
+      <label class="field full">Venue<input class="input" name="venue" list="ng-venues" required autocomplete="off" placeholder="e.g. The Northern"><datalist id="ng-venues">${venues.map(v => `<option value="${esc(v)}">`).join('')}</datalist></label>
+      <label class="field">Date<input class="input" type="date" name="date" value="${D.today()}" required></label>
+      <label class="field">Start time<input class="input" type="time" name="time" value="20:00"></label>
+      <label class="field">Fee ($)<input class="input" type="number" min="0" step="1" name="fee" placeholder="Venue's usual fee if left blank"></label>
+      <label class="field" style="flex-direction:row;align-items:center;gap:10px;align-self:end;padding-bottom:10px"><input type="checkbox" name="cash"> Cash job, no invoice</label>
+      <label class="field full" style="flex-direction:row;align-items:center;gap:10px"><input type="checkbox" name="hosting"> Hosting gig (music bingo, karaoke, trivia)</label>
+      <label class="field full">Notes<textarea class="input" name="notes" rows="2" placeholder="Contact, load-in, set times, parking"></textarea></label>
+      <div class="modal-foot full"><button class="btn primary" type="submit">Add gig</button></div>
+    </form></div></div>`;
+  setTimeout(() => $('#overlay [name=venue]')?.focus(), 0);
+}
 function openGigModal(id) {
   const g = gigById(id); if (!g) return;
   const fromCal = g.source === 'calendar';
@@ -5496,6 +5783,7 @@ const ACTIONS = {
     if (g.paid) { g.paidAt = D.today(); const waited = g.invoicedAt ? -D.diff(g.invoicedAt) : 0; if (g.invoiced && !g.cash && waited >= 1) { const v = venueFor(g, true); (v.payDays = v.payDays || []).push(waited); } } else g.paidAt = null; commit(); toast(g.paid ? `${g.venue} paid ${feeText(g)}` : `${g.venue} marked unpaid`); if (el.dataset.from === 'audit') openAudit(); },
   'gig-draft-invoice': el => openInvoiceDraft(el.dataset.id),
   'gig-edit': el => openGigModal(el.dataset.id),
+  'gig-new': () => openNewGigModal(),
   'recat-open': el => openRecatModal(el.dataset.id, el.dataset.gig),
   'recat-scope'(el) { document.querySelectorAll('#rc-scope button').forEach(b => b.classList.toggle('on', b === el)); },
   'recat-set'(el) {
@@ -5599,7 +5887,31 @@ const ACTIONS = {
   'rest-day'(el) { logRestDay((el && el.dataset.d) || D.today()); },
   'bud-go'(el) { const fns = budFns(), i = fns.findIndex(x => x.id === budActive().id) + +el.dataset.d; if (fns[i]) { S().budget.activeId = fns[i].id; Store.save(); render(); } },
   'bud-open'(el) { S().budget.activeId = el.dataset.id; Store.save(); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
-  'bud-new'() { const cur = budFns().slice(-1)[0], st = S(), snap = Store.snapshot(); const f = newFortnight(cur, cur ? D.add(cur.start, 14) : (lastPayday() || D.today())); st.budget.fns.push(f); st.budget.activeId = f.id; commit(); toast(`Started ${fnLabel(f)}. Leftover item money is in Current saved${f.income.some(x => /^carried over/i.test(x.name)) ? ', and unallocated money is carried over as income' : ''}.`, snap); },
+  'bud-new'() {
+    const cur = budFns().slice(-1)[0], st = S(), snap = Store.snapshot(); const f = newFortnight(cur, cur ? fnEnd(cur) : (lastPayday() || D.today()));
+    const msg = f._msg; delete f._msg; st.budget.fns.push(f); st.budget.activeId = f.id; commit();
+    toast(`Started ${fnLabel(f)}. Leftover item money is in Current saved${f.income.some(x => /^carried over/i.test(x.name)) ? ', and unallocated money is carried over as income' : ''}${msg ? `. ${msg}` : ''}.`, snap);
+  },
+  'bud-gigs-auto'() { const st = S(), snap = Store.snapshot(), fn = budActive(); let g = fn.income.find(x => /gig/i.test(x.name)); if (!g) { g = { id: uid('bi'), name: 'Gigs', amount: 0 }; fn.income.push(g); } budSet().income[g.name.toLowerCase().trim()] = { mode: 'gigs' }; budReapply(); commit(); toast(`${g.name} income now fills in from paid gigs every ${pWord(fn)}`, snap); },
+  'bs-open'() { if (VIEW !== 'budget') go('budget'); openBudSettings(); },
+  'bs-cat-move'(el) { const cats = budCatsAll(), k = cats.findIndex(c => c.k === el.dataset.k), j = k + +el.dataset.d; if (j < 0 || j >= cats.length) return; [cats[k], cats[j]] = [cats[j], cats[k]]; const set = budSet(); cats.forEach((c, n) => { set.cats[c.k] = { ...(set.cats[c.k] || {}), order: n }; }); Store.save(); render(); openBudSettings(); },
+  'bs-bill-del'(el) { const set = budSet(), snap = Store.snapshot(), b = set.bills.find(x => x.id === el.dataset.id); if (!b) return; set.bills = set.bills.filter(x => x !== b); S().budget.fns.forEach(f => f.items.forEach(i => { if (i.billId === b.id) delete i.billId; })); commit(); openBudSettings(); toast(`${b.name} is no longer a repeating bill (its budget line stays)`, snap); },
+  'goal-settings'(el) { openGoalSettings(el.dataset.fn, el.dataset.id); },
+  'goal-move'(el) {
+    const fn = budActive(), list = sortGoals(fn.items.filter(i => isGoal(i) && !i.achieved)), k = list.findIndex(i => i.id === el.dataset.id), j = k + +el.dataset.d; if (k < 0 || j < 0 || j >= list.length) return;
+    [list[k], list[j]] = [list[j], list[k]];
+    list.forEach((i, n) => sameGoalLater(fn, i).forEach(({ x }) => { x.priority = n + 1; }));
+    commit();
+  },
+  'goal-pause'(el) {
+    const st = S(), snap = Store.snapshot(), fn = st.budget.fns.find(f => f.id === el.dataset.fn) || budActive(), i = fn && fn.items.find(x => x.id === el.dataset.id); if (!i) return;
+    const n = +el.dataset.n; let until = fn.start; for (let k = 0; k < n; k++) until = stepPeriod(until, fnCycle(fn));
+    sameGoalLater(fn, i).forEach(({ g, x }) => {
+      if (n) { x.pausedUntil = until; if (g.start < until) x.transferred = 0; }
+      else { delete x.pausedUntil; x.transferred = null; if (x.autoFill !== false && x.due && +x.target) { const need = goalNeed(x, g); if (need != null) { x.budget = need; x.transferred = need; } } }
+    });
+    commit(); closeOverlay(); toast(n ? `${goalName(i)} paused until ${D.label(until)}` : `${goalName(i)} resumed`, snap);
+  },
   'bud-remove'(el) { const st = S(), snap = Store.snapshot(), f = st.budget.fns.find(x => x.id === el.dataset.id); if (!f) return; st.budget.fns = st.budget.fns.filter(x => x.id !== f.id); st.budget.activeId = null; commit(); toast(`Deleted ${fnLabel(f)}`, snap); },
   'bud-del'(el) { const fn = budActive(), snap = Store.snapshot(); fn.items = fn.items.filter(x => x.id !== el.dataset.id); commit(); toast('Item removed', snap); },
   'bud-del-inc'(el) { const fn = budActive(), snap = Store.snapshot(); fn.income = fn.income.filter(x => x.id !== el.dataset.id); commit(); toast('Income removed', snap); },
@@ -5618,10 +5930,13 @@ const ACTIONS = {
     const f = S().budget.fns.find(x => x.id === el.dataset.fn), i = f && f.items.find(x => x.id === el.dataset.id); if (!i) return;
     const snap = Store.snapshot(), key = goalName(i).toLowerCase(), on = !i.achieved;
     budFns().filter(g => g.start >= f.start).forEach(g => g.items.forEach(x => { if (isGoal(x) && goalName(x).toLowerCase() === key) { if (on) x.achieved = D.today(); else delete x.achieved; } }));
+    const done = S().budget.doneGoals || (S().budget.doneGoals = []);
+    S().budget.doneGoals = done.filter(d => d.name.toLowerCase() !== key);
+    if (on) S().budget.doneGoals.push({ name: goalName(i), target: +i.target || 0, saved: goalSaved(i), achieved: D.today() });
     commit();
-    if (on) { toast(`🎉 ${goalName(i)} achieved! It won't carry into new fortnights.`, snap); celebrate(el); } else toast(`${goalName(i)} is back in progress`, snap);
+    if (on) { toast(`🎉 ${goalName(i)} achieved! It's in your Done list and won't carry into new ${pWord(f)}s.`, snap); celebrate(el); } else toast(`${goalName(i)} is back in progress`, snap);
   },
-  'goal-target'(el) { S().budget.activeId = el.dataset.fn; Store.save(); if (VIEW !== 'budget') go('budget'); else render(); setTimeout(() => { openBudNote(el.dataset.id); setTimeout(() => $('form[data-form=bud-note] input[name=target]')?.focus(), 0); }, 50); },
+  'goal-target'(el) { S().budget.activeId = el.dataset.fn; Store.save(); if (VIEW !== 'budget') go('budget'); else render(); setTimeout(() => { openGoalSettings(el.dataset.fn, el.dataset.id); setTimeout(() => $('form[data-form=goal-set] input[name=target]')?.focus(), 0); }, 50); },
   'bud-fy'(el) { const st = S(), y = +el.dataset.y, s = st.settings.open_budfy || (st.settings.open_budfy = [fyOfDate(D.today())]), i = s.indexOf(y); if (i >= 0) s.splice(i, 1); else s.push(y); Store.save(); render(); },
   'bud-chart'(el) { budChartPeriod = el.dataset.p; render(); },
   'bud-chart-what'(el) { budChartWhat = el.dataset.w; render(); },
@@ -5931,6 +6246,15 @@ function boot() {
       t.remindAt = f.elements.remindAt && f.elements.remindAt.value ? f.elements.remindAt.value : undefined;
       if (t.source === 'calendar') t.userEdited = true;
       closeOverlay(); commit(); toast('Saved');
+    } else if (kind === 'gig-new') {
+      const venue = val('venue'), date = val('date'); if (!venue || !date) return;
+      const dup = st.gigs.find(g => g.date === date && venueKey(g.venue) === venueKey(venue));
+      if (dup) { closeOverlay(); toast(`You already have a gig at ${venueBaseName(dup.venue)} that day`); return; }
+      const ng = { id: uid('g'), venue, date, time: val('time') || '20:00', fee: val('fee') === '' ? null : Math.max(0, +val('fee')), setlistId: null, rehearsals: [], checklist: [], invoiced: false, paid: false, notes: f.elements.notes.value };
+      if (f.elements.hosting.checked) ng.hosting = true;
+      if (f.elements.cash.checked) ng.cash = true;
+      applyVenueDefaults(ng); ensureChecklist(ng); st.gigs.push(ng);
+      closeOverlay(); commit(); toast(`Added gig at ${venue}, ${D.label(date)}${gigFee(ng) != null ? ` (${aud(gigFee(ng))})` : ''}`);
     } else if (kind === 'gig') {
       const g = gigById(f.dataset.id); if (!g) return;
       if (g.source !== 'calendar') { g.venue = val('venue') || g.venue; g.date = val('date') || g.date; g.time = val('time') || g.time; }
@@ -5977,8 +6301,26 @@ function boot() {
     } else if (kind === 'goal-add') {
       const fn = budActive(), name = val('name'); if (!fn || !name) return;
       const num = k => r2(+String(val(k)).replace(/[$,]/g, '') || 0);
-      fn.items.push({ id: uid('bb'), sec: 'seasonal', name: cap(name), budget: num('per'), saved: 0, transferred: null, actual: null, goal: true, target: num('target') || undefined, type: 'savings' });
-      commit(); toast(`Goal added: ${cap(name)}. It sits in Seasonal and carries over each fortnight.`);
+      const it = { id: uid('bb'), sec: 'seasonal', name: cap(name), budget: num('per'), saved: 0, transferred: null, actual: null, goal: true, target: num('target') || undefined, type: 'savings', priority: fn.items.filter(i => isGoal(i) && !i.achieved).length + 1 };
+      if (val('due')) { it.due = val('due'); if (!num('per') && it.target) { const need = goalNeed(it, fn); if (need != null) { it.budget = need; it.transferred = need; } } else it.autoFill = false; }
+      fn.items.push(it);
+      commit(); toast(`Goal added: ${cap(name)}${it.due && it.target ? `, ${money2(it.budget).replace('.00', '')} per ${pWord(fn)} to reach it by ${D.label(it.due)}` : ''}. It sits in Seasonal and carries over each ${pWord(fn)}.`);
+    } else if (kind === 'goal-set') {
+      const fn = st.budget.fns.find(x => x.id === f.dataset.fn) || budActive(), i = fn && fn.items.find(x => x.id === f.dataset.id); if (!i) return;
+      const snap = Store.snapshot(), name = val('name') || goalName(i), tgt = val('target') === '' ? undefined : r2(+val('target').replace(/[$,]/g, '') || 0), due = val('due') || undefined, auto = f.elements.autoFill.checked;
+      sameGoalLater(fn, i).forEach(({ g, x }) => {
+        x.name = /^(sg\d+\s*[-–:]\s*)/i.test(x.name) ? x.name.replace(/^(sg\d+\s*[-–:]\s*).*/i, '$1' + name) : name; x.goal = true; x.target = tgt; x.due = due; x.autoFill = auto;
+        if (auto && due && tgt && !goalPaused(x, g)) { const need = goalNeed(x, g); if (need != null) { x.budget = need; x.transferred = need; } }
+      });
+      closeOverlay(); commit(); toast(`${name} saved`, snap);
+    } else if (kind === 'bs-bill-add') {
+      const set = budSet(), amt = r2(+val('amount').replace(/[$,]/g, '') || 0); if (!val('name') || !amt || !val('first')) return;
+      set.bills.push({ id: uid('rb'), name: cap(val('name')), amount: amt, every: val('every') || 'year', first: val('first') });
+      budReapply(); commit(); openBudSettings(); toast(`${cap(val('name'))} added: ${money2(billPer(set.bills[set.bills.length - 1], budActive()))} set aside each ${pWord(budActive())}`);
+    } else if (kind === 'bs-cat-add') {
+      const name = val('name'); if (!name) return; const b = S().budget, k = 'c_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 24);
+      b.customTypes = b.customTypes || []; if (!budTypes().some(t => t[0] === k)) b.customTypes.push({ k, label: cap(name), color: MARK_FUN.colours[b.customTypes.length % MARK_FUN.colours.length] });
+      Store.save(); render(); openBudSettings();
     } else if (kind === 'bud-note') {
       const fn = budActive(), i = fn && fn.items.find(x => x.id === f.dataset.id); if (!i) return;
       if (f.elements.sec && f.elements.sec.value !== i.sec) { const k = fn.items.indexOf(i); fn.items.splice(k, 1); i.sec = f.elements.sec.value; let last = -1; fn.items.forEach((x, j) => { if (x.sec === i.sec) last = j; }); fn.items.splice(last + 1, 0, i); }
@@ -6106,6 +6448,17 @@ function boot() {
     }
     else if (kind === 'rest-day-date') { if (el.value) logRestDay(el.value); }
     else if (kind === 'bud-field') { budField(el); }
+    else if (kind === 'bs') { const set = budSet(), k = el.dataset.k; set[k] = k === 'warnAt' ? +el.value : el.value || null; if (k === 'cycle' && !el.value) set.cycle = 'fortnight'; Store.save(); render(); openBudSettings(); }
+    else if (kind === 'bs-inc') { const set = budSet(), key = el.dataset.name.toLowerCase().trim(), cur = { ...incMode(el.dataset.name) }; if (el.dataset.f === 'mode') cur.mode = el.value; else cur.amount = r2(+el.value.replace(/[$,]/g, '') || 0); set.income[key] = cur; budReapply(); Store.save(); render(); openBudSettings(); }
+    else if (kind === 'bs-cat') { const set = budSet(), o = set.cats[el.dataset.k] = { ...(set.cats[el.dataset.k] || {}) }, f = el.dataset.f; if (f === 'hidden') o.hidden = el.checked; else if (f === 'limit') o.limit = el.value === '' ? 0 : r2(+el.value.replace(/[$,]/g, '') || 0); else if (f === 'label') { if (el.value.trim()) o.label = el.value.trim(); } else o[f] = el.value; Store.save(); render(); if (f !== 'color') openBudSettings(); }
+    else if (kind === 'bs-merge') {
+      const from = el.dataset.k, to = el.value; if (!to) return;
+      const set = budSet(), snap = Store.snapshot(), a = budCatInfo(from), b = budCatInfo(to);
+      S().budget.fns.forEach(f => f.items.forEach(i => { if (budTypeOf(i) === from) i.type = to; }));
+      set.alias[from] = to; S().budget.customTypes = (S().budget.customTypes || []).filter(t => t.k !== from);
+      commit(); openBudSettings(); toast(`${a ? a.label : 'Category'} merged into ${b ? b.label : 'the other category'}`, snap);
+    }
+    else if (kind === 'bs-bill') { const set = budSet(), b = set.bills.find(x => x.id === el.dataset.id); if (!b) return; const f = el.dataset.f; if (f === 'amount') b.amount = r2(+el.value.replace(/[$,]/g, '') || 0); else if (f === 'name') { if (el.value.trim()) b.name = el.value.trim(); } else if (el.value) b[f] = el.value; budReapply(); Store.save(); render(); openBudSettings(); }
     else if (kind === 'bud-pick') { S().budget.activeId = el.value; Store.save(); render(); }
     else if (kind === 'exp-fy') { expFY = +el.value; openExpensesList(); }
     else if (kind === 'gig-cash') { const g = gigById(el.dataset.id); if (g) { const snap = Store.snapshot(); setCash(g, el.checked); commit(); toast(el.checked ? `${venueBaseName(g.venue)}: cash job, no invoice needed` : `${venueBaseName(g.venue)}: needs an invoice`, snap); } }
