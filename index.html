@@ -799,7 +799,8 @@ tr.bdrop-after td{box-shadow:inset 0 -3px 0 var(--accent)}
 .goal-st.ok{background:color-mix(in srgb,var(--ok,#3A8660) 16%,transparent);color:var(--ok,#3A8660)}.goal-st.bad{background:color-mix(in srgb,var(--pri,#E4572E) 16%,transparent);color:var(--pri,#E4572E)}.goal-st.muted{color:var(--muted)}
 .goal-tools{display:inline-flex;gap:4px;margin-left:6px}.goal-tools .linkbtn{padding:0 4px}
 .goal.is-paused{opacity:.75}
-.goal-chart{display:block;width:100%;height:56px;margin-top:6px}.gc-line{fill:none;stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke}.gc-dot{fill:none;stroke:var(--accent);stroke-width:7;stroke-linecap:round;vector-effect:non-scaling-stroke}.goal-tools .linkbtn:disabled{opacity:.25;cursor:default}
+.goal-chart{display:block;width:100%;height:56px;margin-top:6px}.gc-line{fill:none;stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke}.gc-dot{fill:none;stroke:var(--accent);stroke-width:7;stroke-linecap:round;vector-effect:non-scaling-stroke}.goal-done-list .row{align-items:center}
+.goal-tools .linkbtn:disabled{opacity:.25;cursor:default}
 .gc-target{stroke:var(--muted);stroke-dasharray:4 4;stroke-width:1;vector-effect:non-scaling-stroke}.gc-due{stroke:var(--pri,#E4572E);stroke-dasharray:3 3;stroke-width:1;vector-effect:non-scaling-stroke}
 .bud-warn{margin:0 0 14px}
 @media (max-width:700px){.bs-row{grid-template-columns:1fr 96px}.bs-row b{grid-column:1/-1}.bs-cat{grid-template-columns:34px 1fr 80px;}.bs-cat .bs-hide,.bs-cat select,.bs-cat .bs-move{grid-column:auto}}
@@ -2220,7 +2221,7 @@ function loadFeedViaScript(url, anonymous) {
    other device's changes when opened or switched back to. Newest change wins. Calendar events,
    receipt files and your API key stay on each device. */
 /** Each device knows what it is, so sync messages can say "your phone" or "your Mac". */
-const APP_VERSION = '2026-11-11 · budget settings and goals';   // shown in the sidebar and More, so you can check which version is running
+const APP_VERSION = '2026-11-11 · restore goals';   // shown in the sidebar and More, so you can check which version is running
 const DEVICE_KEY = 'mitch-dashboard-device';
 function deviceName() {
   try { const n = localStorage.getItem(DEVICE_KEY); if (n) return n; } catch (e) {}
@@ -4778,7 +4779,7 @@ function goalsTile(fn) {
   return `<section class="panel"><h2>Saving goals</h2>
     ${goals.length ? `${goals.length > 1 ? `<p class="muted" style="margin:-4px 0 8px;font-size:13px">Top of the list gets leftover money first${budSet().leftover === 'goal' ? '' : ' (if leftovers go to goals in Budget settings)'}.</p>` : ''}${goals.map((i, k) => goalRow(i, fn, false, k, goals.length)).join('')}` : `<p class="empty">${done.length ? 'Every goal ticked off. Nice work.' : 'No saving goals yet.'}</p>`}
     <form class="inline-form" data-form="goal-add" style="margin-top:12px"><input class="input" name="name" placeholder="New goal, e.g. Pedalboard upgrade" aria-label="Goal name"><input class="input bnum" name="target" inputmode="decimal" placeholder="Target $" aria-label="Target amount"><input class="input" type="date" name="due" aria-label="Due date (optional)" title="Due date (optional): works out how much to put aside each ${w}"><input class="input bnum" name="per" inputmode="decimal" placeholder="Per ${pAbbr(fn)} $" aria-label="Amount to put aside each ${w}" title="Leave blank with a due date and it's worked out for you"><button class="btn small" type="submit">Add a goal</button></form>
-    ${done.length ? `<h3 class="ms-h">Done</h3><ul class="rows goal-done-list">${done.map(d => `<li class="row"><span aria-hidden="true">🎉</span><div class="row-main"><span>${esc(d.name)}</span><div class="row-meta"><span>${money2(Math.max(+d.saved || 0, +d.target || 0)).replace('.00', '')}</span><span>Achieved ${d.achieved ? D.parse(d.achieved).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span></div></div></li>`).join('')}</ul>` : ''}
+    ${done.length ? `<h3 class="ms-h">Done</h3><ul class="rows goal-done-list">${done.map(d => `<li class="row"><span aria-hidden="true">🎉</span><div class="row-main"><span>${esc(d.name)}</span><div class="row-meta"><span>${money2(Math.max(+d.saved || 0, +d.target || 0)).replace('.00', '')}</span><span>Achieved ${d.achieved ? D.parse(d.achieved).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span></div></div><button class="btn small ghost" data-action="goal-restore" data-name="${esc(d.name)}" title="Put this goal back in your saving goals">Back to goals</button></li>`).join('')}</ul>` : ''}
   </section>`;
 }
 function openGoalSettings(fnId, id) {
@@ -5896,6 +5897,21 @@ const ACTIONS = {
   'bs-open'() { if (VIEW !== 'budget') go('budget'); openBudSettings(); },
   'bs-cat-move'(el) { const cats = budCatsAll(), k = cats.findIndex(c => c.k === el.dataset.k), j = k + +el.dataset.d; if (j < 0 || j >= cats.length) return; [cats[k], cats[j]] = [cats[j], cats[k]]; const set = budSet(); cats.forEach((c, n) => { set.cats[c.k] = { ...(set.cats[c.k] || {}), order: n }; }); Store.save(); render(); openBudSettings(); },
   'bs-bill-del'(el) { const set = budSet(), snap = Store.snapshot(), b = set.bills.find(x => x.id === el.dataset.id); if (!b) return; set.bills = set.bills.filter(x => x !== b); S().budget.fns.forEach(f => f.items.forEach(i => { if (i.billId === b.id) delete i.billId; })); commit(); openBudSettings(); toast(`${b.name} is no longer a repeating bill (its budget line stays)`, snap); },
+  'goal-restore'(el) {
+    const st = S(), snap = Store.snapshot(), fn = budActive(), key = el.dataset.name.toLowerCase(); if (!fn) return;
+    const rec = (st.budget.doneGoals || []).find(d => d.name.toLowerCase() === key);
+    st.budget.doneGoals = (st.budget.doneGoals || []).filter(d => d.name.toLowerCase() !== key);
+    const all = budFns().flatMap(f => f.items.filter(i => isGoal(i) && goalKey(i) === key).map(i => ({ f, i })));
+    all.forEach(({ i }) => { delete i.achieved; });
+    if (!fn.items.some(i => isGoal(i) && goalKey(i) === key)) {
+      const src = all.filter(x => x.f.start <= fn.start).pop() || all[0], o = src ? src.i : {};
+      const it = { id: uid('bb'), sec: 'seasonal', name: o.name || el.dataset.name, budget: +o.budget || 0, saved: src ? goalSaved(o) : r2(+(rec && rec.saved) || 0), transferred: null, actual: null, goal: true, target: o.target ?? (rec && rec.target) ?? undefined, type: o.type || 'savings', priority: fn.items.filter(i => isGoal(i)).length + 1 };
+      ['due', 'autoFill', 'note'].forEach(k => { if (o[k] != null) it[k] = o[k]; });
+      if (it.autoFill !== false && it.due && +it.target) { const need = goalNeed(it, fn); if (need != null) { it.budget = need; it.transferred = need; } }
+      let last = -1; fn.items.forEach((x, j) => { if (x.sec === 'seasonal') last = j; }); fn.items.splice(last + 1, 0, it);
+    }
+    commit(); toast(`${el.dataset.name} is back in your saving goals. Check Current saved in Seasonal if you've spent any of it.`, snap);
+  },
   'goal-settings'(el) { openGoalSettings(el.dataset.fn, el.dataset.id); },
   'goal-move'(el) {
     const fn = budActive(), list = sortGoals(fn.items.filter(i => isGoal(i) && !i.achieved)), k = list.findIndex(i => i.id === el.dataset.id), j = k + +el.dataset.d; if (k < 0 || j < 0 || j >= list.length) return;
