@@ -803,6 +803,10 @@ tr.bdrop-after td{box-shadow:inset 0 -3px 0 var(--accent)}
 .goal-tools .linkbtn:disabled{opacity:.25;cursor:default}
 .gc-target{stroke:var(--muted);stroke-dasharray:4 4;stroke-width:1;vector-effect:non-scaling-stroke}.gc-due{stroke:var(--pri,#E4572E);stroke-dasharray:3 3;stroke-width:1;vector-effect:non-scaling-stroke}
 .bud-warn{margin:0 0 14px}
+.fnpie-cell{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}.fnpie-btn{padding:2px 8px;font-size:13px}.fnpie-btn{display:inline-flex;gap:6px;align-items:center}
+.fnpie-row>td{background:var(--surface-2);padding:14px 16px}.fnpie{display:flex;gap:22px;align-items:center;flex-wrap:wrap}.fnpie svg{width:150px;height:150px;flex:0 0 auto}
+.fnpie .ms-legend{flex:1;min-width:220px;max-width:460px}.fnpie .ms-legend li{grid-template-columns:12px 1fr auto 40px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.fnpie .ms-legend em{font-style:normal;color:var(--muted);font-size:12.5px;min-width:36px;text-align:right}
 .bk-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0 0;font-size:14px}.ok-t{color:var(--ok,#3A8660);font-weight:600}
 .bk-rows{margin-top:14px}.bk-rows .row{align-items:center}.bk-total{border-top:2px solid var(--line)}.bk-rows .row.muted{opacity:.6}
 .bk-result{margin-top:14px;padding:12px 14px;border-radius:12px;background:var(--surface-2)}.bk-result.ok{background:color-mix(in srgb,var(--ok,#3A8660) 14%,transparent)}.bk-result.off{background:color-mix(in srgb,var(--warn,#D9A03F) 16%,transparent)}
@@ -2232,7 +2236,7 @@ function loadFeedViaScript(url, anonymous) {
    other device's changes when opened or switched back to. Newest change wins. Calendar events,
    receipt files and your API key stay on each device. */
 /** Each device knows what it is, so sync messages can say "your phone" or "your Mac". */
-const APP_VERSION = '2026-11-11 · categories include saved';   // shown in the sidebar and More, so you can check which version is running
+const APP_VERSION = '2026-11-12 · formatted Excel export';   // shown in the sidebar and More, so you can check which version is running
 const DEVICE_KEY = 'mitch-dashboard-device';
 function deviceName() {
   try { const n = localStorage.getItem(DEVICE_KEY); if (n) return n; } catch (e) {}
@@ -5074,27 +5078,191 @@ function budgetSheetCells(fns) {
   });
   return { cells, lastCol: colName(fns.length * 8 - 1), lastRow: maxRow };
 }
+/* ---------- Budget export: a formatted .xlsx with a pie chart per fortnight, built here (no downloads) ---------- */
+const xEsc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = b => { let c = ~0; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (~c) >>> 0; };
+/** A zip with no compression (all an .xlsx needs). */
+function zipStore(files, type) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  files.forEach(f => {
+    const nm = enc.encode(f.name), d = typeof f.data === 'string' ? enc.encode(f.data) : f.data, crc = crc32(d);
+    const h = new DataView(new ArrayBuffer(30)); [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [8, 0, 2], [10, 0, 2], [12, 0x21, 2], [14, crc, 4], [18, d.length, 4], [22, d.length, 4], [26, nm.length, 2], [28, 0, 2]].forEach(([o, v, n]) => n === 4 ? h.setUint32(o, v, true) : h.setUint16(o, v, true));
+    parts.push(new Uint8Array(h.buffer), nm, d);
+    const c = new DataView(new ArrayBuffer(46)); [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [10, 0, 2], [12, 0, 2], [14, 0x21, 2], [16, crc, 4], [20, d.length, 4], [24, d.length, 4], [28, nm.length, 2], [30, 0, 2], [32, 0, 2], [34, 0, 2], [36, 0, 2], [38, 0, 4], [42, off, 4]].forEach(([o, v, n]) => n === 4 ? c.setUint32(o, v, true) : c.setUint16(o, v, true));
+    central.push(new Uint8Array(c.buffer), nm); off += 30 + nm.length + d.length;
+  });
+  const size = central.reduce((a, x) => a + x.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, size, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(e.buffer)], { type });
+}
+function xlStyles() {
+  const fonts = ['<font><sz val="11"/><color rgb="FF1F2933"/><name val="Calibri"/><family val="2"/></font>'], fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
+  const borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'], xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'], seen = {};
+  const at = (arr, x) => { let i = arr.indexOf(x); if (i < 0) { arr.push(x); i = arr.length - 1; } return i; };
+  const get = (o = {}) => {
+    const key = JSON.stringify(o); if (seen[key] != null) return seen[key];
+    const font = `<font>${o.b ? '<b/>' : ''}${o.i ? '<i/>' : ''}<sz val="${o.sz || 11}"/><color rgb="FF${o.color || '1F2933'}"/><name val="Calibri"/><family val="2"/></font>`;
+    const fill = o.fill ? `<fill><patternFill patternType="solid"><fgColor rgb="FF${o.fill}"/><bgColor indexed="64"/></patternFill></fill>` : null;
+    const side = k => o.bd && o.bd[k] ? `<${k} style="${o.bd[k]}"><color rgb="FF${o.bdc || 'D5DCE4'}"/></${k}>` : `<${k}/>`;
+    const border = o.bd ? `<border>${side('left')}${side('right')}${side('top')}${side('bottom')}<diagonal/></border>` : null;
+    const nf = o.fmt === 'money' ? 164 : o.fmt === 'pct' ? 165 : 0;
+    xfs.push(`<xf numFmtId="${nf}" fontId="${at(fonts, font)}" fillId="${fill ? at(fills, fill) : 0}" borderId="${border ? at(borders, border) : 0}" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="${o.va || 'center'}"${o.al ? ` horizontal="${o.al}"` : ''}${o.wrap ? ' wrapText="1"' : ''}${o.ind ? ` indent="${o.ind}"` : ''}/></xf>`);
+    return (seen[key] = xfs.length - 1);
+  };
+  const xml = () => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="&quot;$&quot;#,##0.00"/><numFmt numFmtId="165" formatCode="0.0%"/></numFmts>
+<fonts count="${fonts.length}">${fonts.join('')}</fonts><fills count="${fills.length}">${fills.join('')}</fills><borders count="${borders.length}">${borders.join('')}</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join('')}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  return { get, xml };
+}
+const XL_PALETTE = ['4F68A6', '2BBFA4', 'E2A33B', 'E4572E', '7B61FF', 'FF5D8F', '3A8660', '8C6D5A', '5DA9E9', 'B5A642'];
+const xlHex = (c, k) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '').trim()); return m ? m[1].toUpperCase() : XL_PALETTE[k % XL_PALETTE.length]; };
+function pieChartXml(ch) {
+  const n = ch.labels.length;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:roundedCorners val="0"/>
+<c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1200" b="1"><a:solidFill><a:srgbClr val="141F2E"/></a:solidFill></a:defRPr></a:pPr><a:r><a:rPr lang="en-AU" sz="1200" b="1"><a:solidFill><a:srgbClr val="141F2E"/></a:solidFill></a:rPr><a:t>${xEsc(ch.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>
+<c:plotArea><c:layout/><c:pieChart><c:varyColors val="1"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>Spent</c:v></c:tx>
+${ch.colors.map((c, k) => `<c:dPt><c:idx val="${k}"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="${c}"/></a:solidFill><a:ln w="19050"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr></c:dPt>`).join('')}
+<c:dLbls><c:numFmt formatCode="0%" sourceLinked="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:defRPr></a:pPr><a:endParaRPr lang="en-AU"/></a:p></c:txPr><c:dLblPos val="inEnd"/><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="1"/><c:showBubbleSize val="0"/><c:showLeaderLines val="0"/></c:dLbls>
+<c:cat><c:strRef><c:f>${xEsc(ch.catRef)}</c:f><c:strCache><c:ptCount val="${n}"/>${ch.labels.map((l, k) => `<c:pt idx="${k}"><c:v>${xEsc(l)}</c:v></c:pt>`).join('')}</c:strCache></c:strRef></c:cat>
+<c:val><c:numRef><c:f>${xEsc(ch.valRef)}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${n}"/>${ch.values.map((v, k) => `<c:pt idx="${k}"><c:v>${v}</c:v></c:pt>`).join('')}</c:numCache></c:numRef></c:val>
+</c:ser><c:firstSliceAng val="0"/></c:pieChart><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>
+<c:legend><c:legendPos val="r"/><c:overlay val="0"/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1000"><a:solidFill><a:srgbClr val="1F2933"/></a:solidFill></a:defRPr></a:pPr><a:endParaRPr lang="en-AU"/></a:p></c:txPr></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>
+<c:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln w="9525"><a:solidFill><a:srgbClr val="D5DCE4"/></a:solidFill></a:ln></c:spPr></c:chartSpace>`;
+}
+/** The whole workbook: one "Budget" sheet with a formatted block per fortnight, side by side. */
+function budgetXlsx(fns) {
+  const ST = xlStyles(), s = ST.get, cells = {}, merges = [], heights = {}, charts = [], SHEET = 'Budget';
+  const NAVY = '141F2E', MUTED = '66717E';
+  const FILL = { income: 'E3ECF7', fixed: 'DCE6F2', variable: 'DDF0E3', seasonal: 'FBEFD6', summary: 'ECE7F7', cats: 'F6E3EB' };
+  const put = (r, c, o) => { cells[`${colName(c)}${r + 1}`] = { r, c, ...o }; };
+  const sTitle = s({ b: 1, sz: 15, color: 'FFFFFF', fill: NAVY, ind: 1 }), sSub = s({ i: 1, sz: 10, color: MUTED, ind: 1 });
+  const band = k => s({ b: 1, sz: 12, color: NAVY, fill: FILL[k], bd: { bottom: 'thin' }, bdc: '9AA8B8', ind: 1 });
+  const hd = { b: 1, sz: 10, color: MUTED, fill: 'F5F7FA', bd: { bottom: 'thin' }, bdc: 'B8C2CC' };
+  const sHead = s(hd), sHeadR = s({ ...hd, al: 'right' });
+  const row = { bd: { bottom: 'hair' } };
+  const sText = s({ ...row, ind: 1 }), sMoney = s({ ...row, fmt: 'money' }), sPct = s({ ...row, fmt: 'pct', color: MUTED }), sCat = s({ ...row, color: MUTED, sz: 10 }), sNote = s({ ...row, i: 1, color: MUTED, sz: 10, wrap: 1 });
+  const tot = { b: 1, bd: { top: 'thin', bottom: 'double' }, bdc: '7D8A98' };
+  const sTotL = s({ ...tot, ind: 1 }), sTotM = s({ ...tot, fmt: 'money' }), sTotP = s({ ...tot, fmt: 'pct' });
+  const sEmpty = s({ i: 1, color: MUTED, sz: 10, ind: 1 });
+  const W = 11, widths = [32, 14, 15, 15, 14, 14, 12, 18, 34, 12, 3];
+  let maxRow = 0;
+  fns.forEach((fn, b) => {
+    const c0 = b * W, A = n => colName(c0 + n), cell = (n, r) => `${A(n)}${r + 1}`;
+    const fillRow = (r, st, to = 8) => { for (let k = 0; k <= to; k++) if (!cells[cell(k, r)]) put(r, c0 + k, { s: st }); };
+    const t = budTotals(fn); let r = 0;
+    put(r, c0, { v: fnLabel(fn), s: sTitle }); fillRow(r, sTitle); merges.push(`${cell(0, r)}:${cell(8, r)}`); heights[r] = 30; r++;
+    put(r, c0, { v: `${cap(pWord(fn))} starting ${D.parse(fn.start).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`, s: sSub }); r += 2;
+    // Income
+    put(r, c0, { v: 'Income', s: band('income') }); fillRow(r, band('income')); heights[r] = 22; r++;
+    put(r, c0, { v: 'Source', s: sHead }); put(r, c0 + 1, { v: 'Amount', s: sHeadR }); r++;
+    const inc0 = r;
+    fn.income.forEach(x => { put(r, c0, { v: x.name + (x.auto === 'gigs' ? ' (from paid gigs)' : ''), s: sText }); put(r, c0 + 1, { v: r2(incAmt(fn, x)), s: sMoney }); r++; });
+    const incTot = r; put(r, c0, { v: 'Total income', s: sTotL }); put(r, c0 + 1, { f: fn.income.length ? `SUM(${cell(1, inc0)}:${cell(1, r - 1)})` : '0', s: sTotM }); r += 2;
+    const IT = `$${A(1)}$${incTot + 1}`, trTot = [], acTot = [];
+    const firstItemRow = r;
+    BUD_SECS.forEach(([k, label]) => {
+      const items = fn.items.filter(i => i.sec === k);
+      put(r, c0, { v: label, s: band(k) }); fillRow(r, band(k)); heights[r] = 22; r++;
+      ['Item', '', `Budget per ${pAbbr(fn)}`, 'Current saved', 'Transferred', 'Actual used', '% of income', 'Category', 'Notes'].forEach((h, j) => put(r, c0 + j, { v: h, s: j >= 2 && j <= 6 ? sHeadR : sHead })); r++;
+      const s0 = r;
+      items.forEach(i => {
+        const R = r + 1;
+        put(r, c0, { v: (isGoal(i) ? '★ ' : '') + i.name, s: sText }); put(r, c0 + 1, { s: sText });
+        put(r, c0 + 2, { v: r2(i.budget), s: sMoney }); put(r, c0 + 3, { v: r2(i.saved), s: sMoney });
+        put(r, c0 + 4, i.transferred == null || i.transferred === '' ? { f: `MAX(0,${A(2)}${R}-${A(3)}${R})`, s: sMoney } : { v: r2(i.transferred), s: sMoney });
+        put(r, c0 + 5, i.actual != null && i.actual !== '' ? { v: r2(i.actual), s: sMoney } : { s: sMoney });
+        put(r, c0 + 6, { f: `IF(${IT}=0,0,IF(${A(5)}${R}="",${A(4)}${R},${A(5)}${R})/${IT})`, s: sPct });
+        put(r, c0 + 7, { v: (budCatInfo(budTypeOf(i)) || { label: 'Other' }).label, s: sCat });
+        put(r, c0 + 8, { v: i.note || '', s: sNote });
+        put(r, c0 + 9, { f: `IF(${A(5)}${R}="",${A(3)}${R}+${A(4)}${R},${A(5)}${R})`, s: sMoney });   // hidden: what the pie counts
+        r++;
+      });
+      if (!items.length) { put(r, c0, { v: 'Nothing in this section', s: sEmpty }); r++; }
+      const rng = n => `${A(n)}${s0 + 1}:${A(n)}${r}`;
+      put(r, c0, { v: 'Total', s: sTotL }); put(r, c0 + 1, { s: sTotL });
+      [2, 3, 4, 5].forEach(n => put(r, c0 + n, { f: `SUM(${rng(n)})`, s: sTotM }));
+      put(r, c0 + 6, { f: `IF(${IT}=0,0,(SUM(${rng(5)})+SUMIF(${rng(5)},"",${rng(4)}))/${IT})`, s: sTotP });
+      put(r, c0 + 7, { s: sTotL }); put(r, c0 + 8, { s: sTotL });
+      trTot.push(cell(4, r)); acTot.push(cell(5, r)); r += 2;
+    });
+    const lastItemRow = r - 2;
+    // Summary
+    put(r, c0, { v: 'Summary', s: band('summary') }); fillRow(r, band('summary')); heights[r] = 22; r++;
+    const sumL = s({ ...row, ind: 1 }), sumV = s({ ...row, fmt: 'money', b: 1 });
+    const rem = t.remaining, sRem = s({ b: 1, sz: 12, fmt: 'money', color: rem < -0.004 ? 'C0392B' : '2F7A55', bd: { top: 'thin', bottom: 'double' }, bdc: '7D8A98' }), sRemL = s({ b: 1, sz: 12, bd: { top: 'thin', bottom: 'double' }, bdc: '7D8A98', ind: 1 });
+    const ti = r; put(r, c0, { v: 'Total income', s: sumL }); put(r, c0 + 1, { f: `${A(1)}${incTot + 1}`, s: sumV }); r++;
+    put(r, c0, { v: 'Total transferred (expenses)', s: sumL }); put(r, c0 + 1, { f: `SUM(${trTot.join(',')})`, s: sumV }); r++;
+    put(r, c0, { v: 'Actual used', s: sumL }); put(r, c0 + 1, { f: `SUM(${acTot.join(',')})`, s: sumV }); r++;
+    put(r, c0, { v: 'Remaining (income − transferred)', s: sRemL }); put(r, c0 + 1, { f: `${cell(1, ti)}-${cell(1, ti + 1)}`, s: sRem }); heights[r] = 20; r += 2;
+    // Spending by category: table + pie
+    const vals = {}; fn.items.forEach(i => { const k = budTypeOf(i); vals[k] = (vals[k] || 0) + catSpent(i); });
+    const cats = budCatsAll().map((c, k) => ({ label: c.label, color: xlHex(c.color, k), v: r2(vals[c.k] || 0) })).filter(c => c.v > 0.004).sort((a, b) => b.v - a.v);
+    put(r, c0, { v: 'Spending by category', s: band('cats') }); fillRow(r, band('cats')); heights[r] = 22; r++;
+    put(r, c0, { v: 'Category', s: sHead }); put(r, c0 + 1, { v: 'Amount', s: sHeadR }); put(r, c0 + 2, { v: 'Share', s: sHeadR }); r++;
+    const c1 = r, catR = `${A(7)}$${firstItemRow + 1}:$${A(7)}$${lastItemRow + 1}`, valR = `${A(9)}$${firstItemRow + 1}:$${A(9)}$${lastItemRow + 1}`;
+    cats.forEach(c => { put(r, c0, { v: c.label, s: sText }); put(r, c0 + 1, { f: `SUMIF($${catR},${cell(0, r)},$${valR})`, s: sMoney }); put(r, c0 + 2, { f: `IF(${cell(1, c1 + cats.length)}=0,0,${cell(1, r)}/${cell(1, c1 + cats.length)})`, s: sPct }); r++; });
+    if (!cats.length) { put(r, c0, { v: 'Nothing spent or set aside', s: sEmpty }); r++; }
+    put(r, c0, { v: 'Total', s: sTotL }); put(r, c0 + 1, { f: cats.length ? `SUM(${cell(1, c1)}:${cell(1, r - 1)})` : '0', s: sTotM }); put(r, c0 + 2, { v: cats.length ? 1 : 0, s: sTotP }); r++;
+    put(r, c0, { v: 'Actual used, or Current saved + Transferred where Actual used is blank.', s: sSub }); r += 2;
+    if (cats.length) {
+      charts.push({ title: `Spending by category`, labels: cats.map(c => c.label), values: cats.map(c => c.v), colors: cats.map(c => c.color),
+        catRef: `'${SHEET}'!$${A(0)}$${c1 + 1}:$${A(0)}$${c1 + cats.length}`, valRef: `'${SHEET}'!$${A(1)}$${c1 + 1}:$${A(1)}$${c1 + cats.length}`, from: { col: c0, row: r }, to: { col: c0 + 5, row: r + 18 } });
+      r += 20;
+    }
+    maxRow = Math.max(maxRow, r);
+  });
+  // sheet xml
+  const byRow = {}; Object.entries(cells).forEach(([addr, x]) => { (byRow[x.r] = byRow[x.r] || []).push([addr, x]); });
+  const cellXml = ([addr, x]) => {
+    const st = x.s ? ` s="${x.s}"` : '';
+    if (x.f != null) return `<c r="${addr}"${st}><f>${xEsc(x.f)}</f></c>`;
+    if (typeof x.v === 'number') return `<c r="${addr}"${st}><v>${x.v}</v></c>`;
+    if (x.v != null && x.v !== '') return `<c r="${addr}"${st} t="inlineStr"><is><t xml:space="preserve">${xEsc(x.v)}</t></is></c>`;
+    return `<c r="${addr}"${st}/>`;
+  };
+  const rowsXml = Object.keys(byRow).map(Number).sort((a, b) => a - b).map(r => `<row r="${r + 1}"${heights[r] ? ` ht="${heights[r]}" customHeight="1"` : ''}>${byRow[r].sort((a, b) => a[1].c - b[1].c).map(cellXml).join('')}</row>`).join('');
+  const colsXml = fns.flatMap((_, b) => widths.map((w, k) => `<col min="${b * W + k + 1}" max="${b * W + k + 1}" width="${w}" customWidth="1"${k === 9 ? ' hidden="1"' : ''}/>`)).join('');
+  const lastCol = colName(fns.length * W - 1);
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:${lastCol}${maxRow}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="17" customHeight="1"/>
+<cols>${colsXml}</cols><sheetData>${rowsXml}</sheetData>${merges.length ? `<mergeCells count="${merges.length}">${merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : ''}
+<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>${charts.length ? '<drawing r:id="rId1"/>' : ''}</worksheet>`;
+  const anchor = (ch, k) => `<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>${ch.from.col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${ch.from.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${ch.to.col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${ch.to.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${k + 2}" name="Chart ${k + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId${k + 1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>`;
+  const files = [
+    { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${charts.length ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''}${charts.map((_, k) => `<Override PartName="/xl/charts/chart${k + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`).join('')}</Types>` },
+    { name: '_rels/.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+    { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets><sheet name="${SHEET}" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>` },
+    { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: 'xl/styles.xml', data: ST.xml() },
+    { name: 'xl/worksheets/sheet1.xml', data: sheet }
+  ];
+  if (charts.length) {
+    files.push({ name: 'xl/worksheets/_rels/sheet1.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>` });
+    files.push({ name: 'xl/drawings/drawing1.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${charts.map(anchor).join('')}</xdr:wsDr>` });
+    files.push({ name: 'xl/drawings/_rels/drawing1.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${charts.map((_, k) => `<Relationship Id="rId${k + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${k + 1}.xml"/>`).join('')}</Relationships>` });
+    charts.forEach((ch, k) => files.push({ name: `xl/charts/chart${k + 1}.xml`, data: pieChartXml(ch) }));
+  }
+  return zipStore(files, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
 async function exportBudget(scope) {
   const all = budFns(), fy = fyOfDate((budActive() || { start: D.today() }).start);
   const fns = scope === 'all' ? all : all.filter(f => fyOfDate(f.start) === fy);
   if (!fns.length) { toast('No fortnights to export.'); return; }
-  toast('Making your spreadsheet…');
   try {
-    await loadScript(LIBS.xlsx);
-    const X = window.XLSX, { cells, lastCol, lastRow } = budgetSheetCells(fns), ws = {};
-    Object.entries(cells).forEach(([addr, c]) => {
-      const cell = c.f ? { t: 'n', f: c.f } : typeof c.v === 'number' ? { t: 'n', v: c.v } : { t: 's', v: String(c.v) };
-      if (c.num) cell.z = '$#,##0.00'; if (c.pct) cell.z = '0.0%';
-      ws[addr] = cell;
-    });
-    ws['!ref'] = `A1:${lastCol}${lastRow}`;
-    ws['!cols'] = fns.flatMap(() => [{ wch: 30 }, { wch: 11 }, { wch: 14 }, { wch: 13 }, { wch: 12 }, { wch: 12 }, { wch: 11 }, { wch: 24 }]);
-    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Budget');
     const name = scope === 'all' ? 'Budget (all fortnights).xlsx' : `Budget ${fyRange(fy).label.replace('–', '-')}.xlsx`;
-    const out = X.write(wb, { bookType: 'xlsx', type: 'array' });
-    const ok = await saveFile(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), name);
-    if (ok) toast(`${name} saved: ${plural(fns.length, 'fortnight')}, with working formulas.`);
-  } catch (e) { toast(e && e.message === 'load' ? 'Couldn’t load the spreadsheet tools. They need the internet the first time.' : 'Couldn’t make the spreadsheet.'); }
+    const ok = await saveFile(budgetXlsx(fns), name);
+    if (ok) toast(`${name} saved: ${plural(fns.length, 'fortnight')}, formatted, with working formulas and a pie chart for each.`);
+  } catch (e) { console.error(e); toast('Couldn’t make the spreadsheet.'); }
 }
 /* Moving budget lines: drag the ⠿ handle (mouse or finger). Items can move between sections. */
 let budDrag = null;
@@ -5250,9 +5418,21 @@ function viewBudget() {
     ${[...new Set(fns.map(f => fyOfDate(f.start)))].sort((a, b) => b - a).map(y => { const list = fns.filter(f => fyOfDate(f.start) === y).reverse(), sum = k => list.reduce((a, f) => a + budTotals(f)[k], 0);
       const openFY = (S().settings.open_budfy || [fyOfDate(D.today())]).includes(y);
       return `<tr class="fy-row"><td><button class="month-head fy-head" data-action="bud-fy" data-y="${y}" aria-expanded="${openFY}"><span class="chev-s ${openFY ? 'open' : ''}" aria-hidden="true"></span><b>${fyRange(y).label} financial year</b> <span class="muted">${plural(list.length, w)}</span></button></td><td class="num"><b>${money2(sum('income'))}</b></td><td class="num"><b>${money2(sum('allocated'))}</b></td><td class="num"><b>${money2(sum('spent'))}</b></td><td class="num"><b>${money2(sum('remaining'))}</b></td></tr>`
-        + (!openFY ? '' : list.map(f => { const x = budTotals(f); return `<tr class="${f.id === fn.id ? 'is-cur' : ''}"><td><button class="linkbtn" data-action="bud-open" data-id="${f.id}">${fnLabel(f)}</button></td><td class="num">${money2(x.income)}</td><td class="num">${money2(x.allocated)}</td><td class="num">${money2(x.spent)}</td><td class="num ${x.remaining < -0.004 ? 'pri' : 'ok-t'}">${money2(x.remaining)}</td></tr>`; }).join('')); }).join('')}
+        + (!openFY ? '' : list.map(f => { const x = budTotals(f); return `<tr class="${f.id === fn.id ? 'is-cur' : ''}"><td><div class="fnpie-cell"><button class="linkbtn" data-action="bud-open" data-id="${f.id}">${fnLabel(f)}</button><button class="btn small ghost fnpie-btn" data-action="fn-pie" data-id="${f.id}" aria-expanded="${openFnPies.has(f.id)}" title="Spending by category for ${fnLabel(f)}"><span class="chev-s ${openFnPies.has(f.id) ? 'open' : ''}" aria-hidden="true"></span> Categories</button></div></td><td class="num">${money2(x.income)}</td><td class="num">${money2(x.allocated)}</td><td class="num">${money2(x.spent)}</td><td class="num ${x.remaining < -0.004 ? 'pri' : 'ok-t'}">${money2(x.remaining)}</td></tr>${openFnPies.has(f.id) ? `<tr class="fnpie-row"><td colspan="5">${fnPieHtml(f)}</td></tr>` : ''}`; }).join('')); }).join('')}
     </tbody></table></div>
   </section>`;
+}
+/** One period's spending by category, for the All fortnights list. */
+const openFnPies = new Set();
+function fnPieHtml(f) {
+  const v = {}; f.items.forEach(i => { const k = budTypeOf(i); v[k] = (v[k] || 0) + catSpent(i); });
+  const rows = budTypes().map(([k, l, c]) => ({ l, c, v: r2(v[k] || 0) })).filter(x => x.v > 0.004).sort((a, b) => b.v - a.v), total = rows.reduce((a, x) => a + x.v, 0);
+  if (!total) return `<p class="empty" style="margin:6px 0">Nothing spent or set aside this ${pWord(f)}.</p>`;
+  const R_ = 44, C = 2 * Math.PI * R_; let off = 0;
+  const arcs = rows.map(x => { const len = x.v / total * C, a = `<circle r="${R_}" cx="60" cy="60" fill="none" stroke="${x.c}" stroke-width="20" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 60 60)"><title>${esc(x.l)}: ${money2(x.v)}</title></circle>`; off += len; return a; }).join('');
+  return `<div class="fnpie"><svg viewBox="0 0 120 120" role="img" aria-label="Spending by category, ${fnLabel(f)}">${arcs}<text x="60" y="56" text-anchor="middle" font-size="9" fill="var(--muted)">Spent</text><text x="60" y="70" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">${money2(total).replace('.00', '')}</text></svg>
+    <ul class="ms-legend">${rows.map(x => `<li><i style="background:${x.c}"></i><span>${esc(x.l)}</span><b>${money2(x.v)}</b><em>${Math.round(x.v / total * 100)}%</em></li>`).join('')}</ul></div>
+    <p class="muted" style="font-size:12.5px;margin:6px 0 0">Actual used, or Current saved + Transferred where Actual used is blank.</p>`;
 }
 /** Reads fortnight blocks from the Excel budget (rows as a grid of cell values). */
 function parseBudgetSheet(rows, today) {
@@ -6042,6 +6222,7 @@ const ACTIONS = {
   },
   'bud-use-avg'(el) { const fn = budActive(), i = fn && fn.items.find(x => x.id === el.dataset.id), snap = Store.snapshot(); if (!i) return; i.budget = +el.dataset.v; commit(); toast(`${i.name} budget set to ${money2(i.budget)}`, snap); },
   'fc-basis'(el) { budSet().fcBasis = el.dataset.b; commit(); },
+  'fn-pie'(el) { const id = el.dataset.id; openFnPies.has(id) ? openFnPies.delete(id) : openFnPies.add(id); render(); },
   'bud-zero'() {
     const fn = budActive(), snap = Store.snapshot(); if (!fn) return;
     const rem = budTotals(fn).remaining; if (Math.abs(rem) < 0.005) return;
@@ -6095,7 +6276,7 @@ const ACTIONS = {
   'bud-export'() {
     const fy = fyOfDate((budActive() || { start: D.today() }).start);
     $('#overlay').innerHTML = `<div class="scrim" data-action="scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="bx-title"><div class="modal-head"><h2 id="bx-title">Export to Excel</h2><button class="btn small ghost" data-action="close">Close</button></div>
-      <p class="muted" style="margin-top:0">Laid out like your spreadsheet, one fortnight per block, with working formulas.</p>
+      <p class="muted" style="margin-top:0">Laid out like your spreadsheet, one fortnight per block side by side, with formatted sections (Income, each expense section, Summary, Spending by category), working formulas and a pie chart for each fortnight.</p>
       <div class="inline-form"><button class="btn primary" data-action="bud-export-go" data-s="fy">${fyRange(fy).label} financial year</button><button class="btn" data-action="bud-export-go" data-s="all">All fortnights</button></div></div></div>`;
   },
   'bud-export-go'(el) { closeOverlay(); exportBudget(el.dataset.s); },
